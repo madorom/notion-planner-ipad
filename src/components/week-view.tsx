@@ -15,9 +15,17 @@ import { ja } from "date-fns/locale";
 import type {
   MouseEvent,
   PointerEvent as ReactPointerEvent,
+  UIEvent,
   WheelEvent,
 } from "react";
-import { useCallback, useEffect, useMemo, useRef, useState } from "react";
+import {
+  useCallback,
+  useEffect,
+  useLayoutEffect,
+  useMemo,
+  useRef,
+  useState,
+} from "react";
 import {
   DAY_END_HOUR,
   DAY_START_HOUR,
@@ -186,6 +194,8 @@ export function WeekView({
   const days = useMemo(() => getWeekDays(currentDate), [currentDate]);
   const bodyHeight = hours.length * HOUR_HEIGHT;
   const gridRef = useRef<HTMLDivElement | null>(null);
+  const timeScrollRef = useRef<HTMLDivElement | null>(null);
+  const timeScrollTopRef = useRef(0);
   const wheelDeltaRef = useRef(0);
   const wheelOffsetRef = useRef(0);
   const lastWheelSlideAtRef = useRef(0);
@@ -254,6 +264,15 @@ export function WeekView({
     dragPreviewRef.current = preview;
     setDragPreview(preview);
   }
+
+  useLayoutEffect(() => {
+    const timeScroll = timeScrollRef.current;
+    if (!timeScroll) {
+      return;
+    }
+
+    timeScroll.scrollTop = timeScrollTopRef.current;
+  }, [currentDate]);
 
   useEffect(() => {
     if (!isSameDay(previousDateRef.current, currentDate)) {
@@ -342,6 +361,10 @@ export function WeekView({
       Math.round(rawMinutes / DRAG_SNAP_MINUTES) * DRAG_SNAP_MINUTES;
     const start = dateAtSlot(day, roundedMinutes);
     onCreate(start, addMinutes(start, 60));
+  }
+
+  function handleTimeScroll(event: UIEvent<HTMLDivElement>) {
+    timeScrollTopRef.current = event.currentTarget.scrollTop;
   }
 
   function handleWheel(event: WheelEvent<HTMLDivElement>) {
@@ -484,7 +507,9 @@ export function WeekView({
                 </div>
 
                 <div
+                  ref={timeScrollRef}
                   className="planner-scroll week-time-scroll overflow-y-auto overflow-x-hidden"
+                  onScroll={handleTimeScroll}
                   onWheel={handleWheel}
                 >
                   <div
