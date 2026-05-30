@@ -462,111 +462,118 @@ export function WeekView({
             }}
             {...swipeHandlers}
           >
-            <div className="grid grid-cols-[72px_repeat(7,minmax(128px,1fr))] border-b border-[color:var(--planner-border)] bg-[color:var(--planner-surface)]">
-              <div className="border-r border-[color:var(--planner-border)]" />
-              {days.map((day) => (
-                <div
-                  key={day.toISOString()}
-                  className={`min-h-20 border-r border-[color:var(--planner-border)] px-3 py-3 last:border-r-0 ${
-                    isSameDay(day, new Date()) ? "bg-mint-500/10" : ""
-                  }`}
-                >
-                  <div className="text-xs font-bold text-[color:var(--planner-soft)]">
-                    {format(day, "EEE", { locale: ja })}
-                  </div>
-                  <div className="mt-1 text-2xl font-bold">{format(day, "d")}</div>
-                </div>
-              ))}
-            </div>
-
-            <div
-              className="planner-scroll week-time-scroll overflow-auto"
-              onWheel={handleWheel}
-            >
-              <div
-                ref={gridRef}
-                className="grid grid-cols-[72px_repeat(7,minmax(128px,1fr))]"
-                style={{ minHeight: bodyHeight }}
-              >
-                <div className="relative border-r border-[color:var(--planner-border)] bg-[color:var(--planner-surface-muted)]">
-                  {hours.map((hour) => (
+            <div className="planner-scroll week-horizontal-scroll overflow-x-auto">
+              <div className="week-table min-w-[968px]">
+                <div className="grid grid-cols-[72px_repeat(7,minmax(128px,1fr))] border-b border-[color:var(--planner-border)] bg-[color:var(--planner-surface)]">
+                  <div className="border-r border-[color:var(--planner-border)]" />
+                  {days.map((day) => (
                     <div
-                      key={hour}
-                      className="border-b border-[color:var(--planner-border)] pr-2 pt-2 text-right text-xs font-semibold text-[color:var(--planner-soft)]"
-                      style={{ height: HOUR_HEIGHT }}
+                      key={day.toISOString()}
+                      className={`min-h-20 border-r border-[color:var(--planner-border)] px-3 py-3 last:border-r-0 ${
+                        isSameDay(day, new Date()) ? "bg-mint-500/10" : ""
+                      }`}
                     >
-                      {hourLabel(hour)}
+                      <div className="text-xs font-bold text-[color:var(--planner-soft)]">
+                        {format(day, "EEE", { locale: ja })}
+                      </div>
+                      <div className="mt-1 text-2xl font-bold">
+                        {format(day, "d")}
+                      </div>
                     </div>
                   ))}
                 </div>
 
-                {days.map((day, dayIndex) => {
-                  const dayTasks = tasksForDay(tasks, day);
-                  const timedTasks = dayTasks.filter((task) => !task.isAllDay);
-                  const laidOutTasks = layoutTimedTasks(timedTasks);
-                  const allDayTasks = dayTasks.filter((task) => task.isAllDay);
-
-                  return (
-                    <div
-                      key={day.toISOString()}
-                      className="planner-grid-paper relative border-r border-[color:var(--planner-border)] last:border-r-0"
-                      style={{ height: bodyHeight }}
-                      onClick={(event) => handleColumnClick(day, event)}
-                    >
-                      {allDayTasks.length > 0 ? (
-                        <div className="absolute left-2 right-2 top-2 z-20 grid gap-1">
-                          {allDayTasks.slice(0, 2).map((task) => (
-                            <TaskCard
-                              key={task.id}
-                              task={task}
-                              compact
-                              onClick={handleTaskClick}
-                            />
-                          ))}
-                        </div>
-                      ) : null}
-
-                      {dragPreview?.dayIndex === dayIndex ? (
+                <div
+                  className="planner-scroll week-time-scroll overflow-y-auto overflow-x-hidden"
+                  onWheel={handleWheel}
+                >
+                  <div
+                    ref={gridRef}
+                    className="grid grid-cols-[72px_repeat(7,minmax(128px,1fr))]"
+                    style={{ minHeight: bodyHeight }}
+                  >
+                    <div className="relative border-r border-[color:var(--planner-border)] bg-[color:var(--planner-surface-muted)]">
+                      {hours.map((hour) => (
                         <div
-                          className="pointer-events-none absolute left-1.5 right-1.5 z-30 rounded-lg border-2 border-dashed border-mint-500 bg-mint-500/15 px-2 py-1 text-xs font-bold text-mint-600 shadow-planner-soft dark:text-mint-500"
-                          style={{
-                            top: dragPreview.top,
-                            height: dragPreview.height,
-                          }}
+                          key={hour}
+                          className="border-b border-[color:var(--planner-border)] pr-2 pt-2 text-right text-xs font-semibold text-[color:var(--planner-soft)]"
+                          style={{ height: HOUR_HEIGHT }}
                         >
-                          {format(dragPreview.start, "HH:mm")}-
-                          {format(dragPreview.end, "HH:mm")}
+                          {hourLabel(hour)}
                         </div>
-                      ) : null}
-
-                      {laidOutTasks.map((layout) => {
-                        const laneWidth = 100 / layout.laneCount;
-                        const isDense = layout.laneCount > 1 || layout.height < 76;
-                        const isDragging =
-                          dragPreview?.task.id === layout.task.id;
-
-                        return (
-                          <TaskCard
-                            key={layout.task.id}
-                            task={layout.task}
-                            compact={isDense}
-                            isDragging={isDragging}
-                            style={{
-                              position: "absolute",
-                              top: layout.top,
-                              left: `calc(${layout.lane * laneWidth}% + 6px)`,
-                              width: `calc(${laneWidth}% - 10px)`,
-                              height: layout.height,
-                              zIndex: 10 + layout.lane,
-                            }}
-                            onClick={handleTaskClick}
-                            onPointerDown={beginTaskDrag}
-                          />
-                        );
-                      })}
+                      ))}
                     </div>
-                  );
-                })}
+
+                    {days.map((day, dayIndex) => {
+                      const dayTasks = tasksForDay(tasks, day);
+                      const timedTasks = dayTasks.filter((task) => !task.isAllDay);
+                      const laidOutTasks = layoutTimedTasks(timedTasks);
+                      const allDayTasks = dayTasks.filter((task) => task.isAllDay);
+
+                      return (
+                        <div
+                          key={day.toISOString()}
+                          className="planner-grid-paper relative border-r border-[color:var(--planner-border)] last:border-r-0"
+                          style={{ height: bodyHeight }}
+                          onClick={(event) => handleColumnClick(day, event)}
+                        >
+                          {allDayTasks.length > 0 ? (
+                            <div className="absolute left-2 right-2 top-2 z-20 grid gap-1">
+                              {allDayTasks.slice(0, 2).map((task) => (
+                                <TaskCard
+                                  key={task.id}
+                                  task={task}
+                                  compact
+                                  onClick={handleTaskClick}
+                                />
+                              ))}
+                            </div>
+                          ) : null}
+
+                          {dragPreview?.dayIndex === dayIndex ? (
+                            <div
+                              className="pointer-events-none absolute left-1.5 right-1.5 z-30 rounded-lg border-2 border-dashed border-mint-500 bg-mint-500/15 px-2 py-1 text-xs font-bold text-mint-600 shadow-planner-soft dark:text-mint-500"
+                              style={{
+                                top: dragPreview.top,
+                                height: dragPreview.height,
+                              }}
+                            >
+                              {format(dragPreview.start, "HH:mm")}-
+                              {format(dragPreview.end, "HH:mm")}
+                            </div>
+                          ) : null}
+
+                          {laidOutTasks.map((layout) => {
+                            const laneWidth = 100 / layout.laneCount;
+                            const isDense =
+                              layout.laneCount > 1 || layout.height < 76;
+                            const isDragging =
+                              dragPreview?.task.id === layout.task.id;
+
+                            return (
+                              <TaskCard
+                                key={layout.task.id}
+                                task={layout.task}
+                                compact={isDense}
+                                isDragging={isDragging}
+                                style={{
+                                  position: "absolute",
+                                  top: layout.top,
+                                  left: `calc(${layout.lane * laneWidth}% + 6px)`,
+                                  width: `calc(${laneWidth}% - 10px)`,
+                                  height: layout.height,
+                                  zIndex: 10 + layout.lane,
+                                }}
+                                onClick={handleTaskClick}
+                                onPointerDown={beginTaskDrag}
+                              />
+                            );
+                          })}
+                        </div>
+                      );
+                    })}
+                  </div>
+                </div>
               </div>
             </div>
           </div>

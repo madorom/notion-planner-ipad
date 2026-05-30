@@ -75,6 +75,11 @@ button {
   overscroll-behavior: contain;
 }
 
+.week-horizontal-scroll {
+  -webkit-overflow-scrolling: touch;
+  overscroll-behavior-x: contain;
+}
+
 @media (min-width: 768px) {
   .week-time-scroll {
     height: min(936px, max(360px, calc(100dvh - 188px)));
