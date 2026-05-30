@@ -1,0 +1,115 @@
+@tailwind base;
+@tailwind components;
+@tailwind utilities;
+
+:root {
+  color-scheme: light;
+  --planner-bg: #f6f7f4;
+  --planner-surface: #fffefa;
+  --planner-surface-muted: #f1f5f1;
+  --planner-border: #ded8cd;
+  --planner-ink: #1f2937;
+  --planner-soft: #5f6b7a;
+}
+
+@media (prefers-color-scheme: dark) {
+  :root {
+    color-scheme: dark;
+    --planner-bg: #17191c;
+    --planner-surface: #22262a;
+    --planner-surface-muted: #1c2023;
+    --planner-border: #353a40;
+    --planner-ink: #f3f4f6;
+    --planner-soft: #c3cad3;
+  }
+}
+
+* {
+  box-sizing: border-box;
+}
+
+html,
+body {
+  min-height: 100%;
+}
+
+body {
+  margin: 0;
+  background:
+    linear-gradient(90deg, rgba(40, 168, 121, 0.06) 0, transparent 36%),
+    linear-gradient(180deg, rgba(228, 109, 92, 0.07) 0, transparent 30%),
+    var(--planner-bg);
+  color: var(--planner-ink);
+  font-family: ui-sans-serif, system-ui, -apple-system, BlinkMacSystemFont,
+    "Segoe UI", sans-serif;
+}
+
+button,
+input,
+select,
+textarea {
+  font: inherit;
+}
+
+button {
+  -webkit-tap-highlight-color: transparent;
+}
+
+.planner-scroll {
+  scrollbar-color: rgba(95, 107, 122, 0.35) transparent;
+  scrollbar-width: thin;
+}
+
+.planner-scroll::-webkit-scrollbar {
+  height: 10px;
+  width: 10px;
+}
+
+.planner-scroll::-webkit-scrollbar-thumb {
+  background: rgba(95, 107, 122, 0.28);
+  border-radius: 999px;
+}
+
+.planner-grid-paper {
+  background-image:
+    linear-gradient(to right, rgba(95, 107, 122, 0.08) 1px, transparent 1px),
+    linear-gradient(to bottom, rgba(95, 107, 122, 0.08) 1px, transparent 1px);
+  background-size: 100% 72px;
+}
+
+.week-slide-layer {
+  --week-slide-from: 24px;
+  animation: week-slide-in 240ms cubic-bezier(0.2, 0.8, 0.2, 1) both;
+  will-change: opacity, transform;
+}
+
+.week-slide-layer[data-direction="previous"] {
+  --week-slide-from: -24px;
+}
+
+.week-gesture-layer {
+  transition: transform 110ms cubic-bezier(0.2, 0.8, 0.2, 1);
+  will-change: transform;
+}
+
+@keyframes week-slide-in {
+  from {
+    opacity: 0.55;
+    transform: translate3d(var(--week-slide-from), 0, 0);
+  }
+
+  to {
+    opacity: 1;
+    transform: translate3d(0, 0, 0);
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .week-slide-layer {
+    animation: none;
+  }
+
+  .week-gesture-layer {
+    transition: none;
+  }
+}
