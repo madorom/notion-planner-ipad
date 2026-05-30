@@ -1,7 +1,7 @@
 "use client";
 
 import { useCallback, useEffect, useMemo, useState } from "react";
-import { AlertCircle } from "lucide-react";
+import { AlertCircle, RotateCcw, X } from "lucide-react";
 import { CalendarHeader } from "@/components/calendar-header";
 import { LoginPanel } from "@/components/login-panel";
 import { MonthView } from "@/components/month-view";
@@ -37,6 +37,11 @@ type ModalState =
 
 type AuthStatus = "checking" | "authenticated" | "guest";
 
+type MoveUndoState = {
+  previousTask: PlannerTask;
+  movedTask: PlannerTask;
+};
+
 function resolveStatusProperty(config: AppConfig | null): NotionProperty | undefined {
   if (!config) {
     return undefined;
@@ -66,6 +71,7 @@ export function PlannerApp() {
   const [error, setError] = useState("");
   const [modal, setModal] = useState<ModalState>(null);
   const [hiddenStatuses, setHiddenStatuses] = useState<string[]>([]);
+  const [moveUndo, setMoveUndo] = useState<MoveUndoState | null>(null);
 
   useEffect(() => {
     let active = true;
@@ -271,6 +277,7 @@ export function PlannerApp() {
 
     try {
       await persistTask(task, existingTask);
+      setMoveUndo(null);
       setModal(null);
       await fetchTasks();
     } catch (saveError) {
@@ -304,6 +311,10 @@ export function PlannerApp() {
         taskInputFromTask(task, movedTask.start, movedTask.end),
         task,
       );
+      setMoveUndo({
+        previousTask: task,
+        movedTask,
+      });
       await fetchTasks();
     } catch (moveError) {
       setTasks(originalTasks);
@@ -311,6 +322,38 @@ export function PlannerApp() {
         moveError instanceof Error
           ? moveError.message
           : "Notionへ保存できませんでした。",
+      );
+    } finally {
+      setSaving(false);
+    }
+  }
+
+  async function undoLastMove() {
+    if (!moveUndo) {
+      return;
+    }
+
+    const undoState = moveUndo;
+    const originalTasks = tasks;
+    setMoveUndo(null);
+    setTasks((current) =>
+      current.map((item) =>
+        item.id === undoState.previousTask.id ? undoState.previousTask : item,
+      ),
+    );
+    setSaving(true);
+    setError("");
+
+    try {
+      await persistTask(taskInputFromTask(undoState.previousTask), undoState.previousTask);
+      await fetchTasks();
+    } catch (undoError) {
+      setTasks(originalTasks);
+      setMoveUndo(undoState);
+      setError(
+        undoError instanceof Error
+          ? undoError.message
+          : "元の位置へ戻せませんでした。",
       );
     } finally {
       setSaving(false);
@@ -426,6 +469,36 @@ export function PlannerApp() {
           onClose={() => setModal(null)}
           onSave={saveTask}
         />
+      ) : null}
+
+      {moveUndo ? (
+        <div className="fixed bottom-4 left-1/2 z-50 flex w-[min(92vw,520px)] -translate-x-1/2 items-center gap-3 rounded-xl border border-[color:var(--planner-border)] bg-[color:var(--planner-surface)] px-4 py-3 shadow-planner">
+          <div className="min-w-0 flex-1">
+            <p className="truncate text-sm font-bold">
+              {moveUndo.movedTask.title}
+            </p>
+            <p className="text-xs font-semibold text-[color:var(--planner-soft)]">
+              移動しました
+            </p>
+          </div>
+          <button
+            type="button"
+            onClick={undoLastMove}
+            disabled={saving}
+            className="inline-flex min-h-10 shrink-0 items-center justify-center gap-2 rounded-lg bg-ink px-3 text-sm font-bold text-white transition active:scale-[0.99] disabled:cursor-not-allowed disabled:opacity-50 dark:bg-mint-500"
+          >
+            <RotateCcw className="h-4 w-4" />
+            元に戻す
+          </button>
+          <button
+            type="button"
+            aria-label="元に戻す通知を閉じる"
+            onClick={() => setMoveUndo(null)}
+            className="inline-flex h-10 w-10 shrink-0 items-center justify-center rounded-lg border border-[color:var(--planner-border)] text-[color:var(--planner-soft)] transition active:scale-[0.98]"
+          >
+            <X className="h-4 w-4" />
+          </button>
+        </div>
       ) : null}
     </div>
   );
