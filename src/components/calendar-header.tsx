@@ -2,7 +2,9 @@
 
 import { addDays, addMonths } from "date-fns";
 import {
+  CalendarCheck,
   CalendarDays,
+  CalendarX,
   ChevronLeft,
   ChevronRight,
   Filter,
@@ -24,12 +26,15 @@ type CalendarHeaderProps = {
   currentDate: Date;
   loading: boolean;
   themeMode: ThemeMode;
+  googleConfigured: boolean;
+  googleConnected: boolean;
   statusOptions: StatusFilterOption[];
   hiddenStatuses: string[];
   onViewChange: (view: "week" | "month") => void;
   onDateChange: (date: Date) => void;
   onRefresh: () => void;
   onToggleTheme: () => void;
+  onToggleGoogleCalendar: () => void;
   onSettings: () => void;
   onToggleStatus: (status: string) => void;
   onShowAllStatuses: () => void;
@@ -65,12 +70,15 @@ export function CalendarHeader({
   currentDate,
   loading,
   themeMode,
+  googleConfigured,
+  googleConnected,
   statusOptions,
   hiddenStatuses,
   onViewChange,
   onDateChange,
   onRefresh,
   onToggleTheme,
+  onToggleGoogleCalendar,
   onSettings,
   onToggleStatus,
   onShowAllStatuses,
@@ -83,6 +91,11 @@ export function CalendarHeader({
   const activeFilterCount = hiddenStatuses.length;
   const themeLabel =
     themeMode === "dark" ? "ホワイトモード" : "ダークモード";
+  const googleLabel = !googleConfigured
+    ? "Google Calendar未設定"
+    : googleConnected
+      ? "Google Calendar解除"
+      : "Google Calendar接続";
 
   return (
     <header className="sticky top-0 z-30 border-b border-[color:var(--planner-border)] bg-[color:var(--planner-bg)]/92 px-3 py-2 backdrop-blur md:px-6 md:py-3">
@@ -185,6 +198,18 @@ export function CalendarHeader({
                 <Sun className="h-5 w-5" />
               ) : (
                 <Moon className="h-5 w-5" />
+              )}
+            </IconButton>
+            <IconButton
+              label={googleLabel}
+              active={googleConnected}
+              onClick={onToggleGoogleCalendar}
+              className="px-2 md:px-3"
+            >
+              {googleConnected ? (
+                <CalendarX className="h-5 w-5" />
+              ) : (
+                <CalendarCheck className="h-5 w-5" />
               )}
             </IconButton>
             <IconButton label="設定" onClick={onSettings} className="px-2 md:px-3">

@@ -464,7 +464,7 @@ export function WeekView({
     task: PlannerTask,
     event: ReactPointerEvent<HTMLButtonElement>,
   ) {
-    if (task.isAllDay || event.button !== 0) {
+    if (task.source === "google" || task.isAllDay || event.button !== 0) {
       return;
     }
 
@@ -618,7 +618,11 @@ export function WeekView({
                               zIndex: 10 + layout.lane,
                             }}
                             onClick={handleTaskClick}
-                            onPointerDown={isCurrentPage ? beginTaskDrag : undefined}
+                            onPointerDown={
+                              isCurrentPage && layout.task.source !== "google"
+                                ? beginTaskDrag
+                                : undefined
+                            }
                           />
                         );
                       })}

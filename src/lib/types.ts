@@ -50,6 +50,7 @@ export type PlannerTask = {
   start: string;
   end?: string;
   isAllDay: boolean;
+  source?: "notion" | "google";
   status?: string;
   statusColor?: string;
   memo?: string;

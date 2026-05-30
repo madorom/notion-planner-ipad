@@ -42,6 +42,11 @@ type ModalState =
 
 type AuthStatus = "checking" | "authenticated" | "guest";
 
+type GoogleSessionState = {
+  configured: boolean;
+  connected: boolean;
+};
+
 type TaskHistoryAction =
   | {
       type: "create";
@@ -89,6 +94,10 @@ export function PlannerApp() {
   const [redoStack, setRedoStack] = useState<TaskHistoryAction[]>([]);
   const [historyBusy, setHistoryBusy] = useState(false);
   const [themeMode, setThemeMode] = useState<ThemeMode>("light");
+  const [googleSession, setGoogleSession] = useState<GoogleSessionState>({
+    configured: false,
+    connected: false,
+  });
 
   useEffect(() => {
     let active = true;
@@ -138,6 +147,31 @@ export function PlannerApp() {
     return nextRange;
   }, [view, currentDate]);
 
+  const fetchGoogleSession = useCallback(async () => {
+    if (authStatus !== "authenticated") {
+      return;
+    }
+
+    try {
+      const response = await fetch("/api/google/session", { cache: "no-store" });
+      const data = (await response.json()) as Partial<GoogleSessionState>;
+
+      if (!response.ok) {
+        if (response.status === 401) {
+          setAuthStatus("guest");
+        }
+        return;
+      }
+
+      setGoogleSession({
+        configured: Boolean(data.configured),
+        connected: Boolean(data.connected),
+      });
+    } catch {
+      setGoogleSession({ configured: false, connected: false });
+    }
+  }, [authStatus]);
+
   const fetchTasks = useCallback(async () => {
     if (!config || authStatus !== "authenticated") {
       return;
@@ -179,6 +213,34 @@ export function PlannerApp() {
       }
 
       setTasks(data.tasks ?? []);
+
+      if (googleSession.connected) {
+        const googleParams = new URLSearchParams({
+          from: range.start.toISOString(),
+          to: range.end.toISOString(),
+        });
+        const googleResponse = await fetch(
+          `/api/google/events?${googleParams.toString()}`,
+        );
+        const googleData = (await googleResponse.json()) as {
+          tasks?: PlannerTask[];
+          connected?: boolean;
+          error?: string;
+        };
+
+        if (!googleResponse.ok) {
+          throw new Error(
+            googleData.error ?? "Google Calendar予定を取得できませんでした。",
+          );
+        }
+
+        if (googleData.connected === false) {
+          setGoogleSession((current) => ({ ...current, connected: false }));
+          return;
+        }
+
+        setTasks([...(data.tasks ?? []), ...(googleData.tasks ?? [])]);
+      }
     } catch (fetchError) {
       setError(
         fetchError instanceof Error
@@ -188,7 +250,17 @@ export function PlannerApp() {
     } finally {
       setLoading(false);
     }
-  }, [authStatus, config, range.end, range.start]);
+  }, [
+    authStatus,
+    config,
+    googleSession.connected,
+    range.end,
+    range.start,
+  ]);
+
+  useEffect(() => {
+    void fetchGoogleSession();
+  }, [fetchGoogleSession]);
 
   useEffect(() => {
     void fetchTasks();
@@ -256,6 +328,48 @@ export function PlannerApp() {
       saveThemeMode(next);
       return next;
     });
+  }
+
+  function toggleGoogleCalendar() {
+    if (!googleSession.configured) {
+      setError(
+        "Google Calendar連携には、VercelのEnvironment VariablesにGOOGLE_CLIENT_IDとGOOGLE_CLIENT_SECRETを設定してください。",
+      );
+      return;
+    }
+
+    if (!googleSession.connected) {
+      window.location.href = "/api/google/connect";
+      return;
+    }
+
+    void disconnectGoogleCalendar();
+  }
+
+  async function disconnectGoogleCalendar() {
+    setError("");
+
+    try {
+      const response = await fetch("/api/google/disconnect", {
+        method: "POST",
+      });
+
+      if (!response.ok) {
+        const data = (await response.json().catch(() => ({}))) as {
+          error?: string;
+        };
+        throw new Error(data.error ?? "Google Calendar連携を解除できませんでした。");
+      }
+
+      setGoogleSession((current) => ({ ...current, connected: false }));
+      await fetchTasks();
+    } catch (disconnectError) {
+      setError(
+        disconnectError instanceof Error
+          ? disconnectError.message
+          : "Google Calendar連携を解除できませんでした。",
+      );
+    }
   }
 
   function pushHistory(action: TaskHistoryAction) {
@@ -377,6 +491,10 @@ export function PlannerApp() {
   }
 
   async function moveTask(task: PlannerTask, start: Date, end: Date) {
+    if (task.source === "google") {
+      return;
+    }
+
     const originalTasks = tasks;
     const movedTask: PlannerTask = {
       ...task,
@@ -502,6 +620,7 @@ export function PlannerApp() {
     await fetch("/api/auth/logout", { method: "POST" }).catch(() => undefined);
     setTasks([]);
     setError("");
+    setGoogleSession({ configured: false, connected: false });
     setUndoStack([]);
     setRedoStack([]);
     setAuthStatus("guest");
@@ -544,6 +663,17 @@ export function PlannerApp() {
   const canUndo = undoStack.length > 0;
   const canRedo = redoStack.length > 0;
 
+  function openTask(task: PlannerTask) {
+    if (task.source === "google") {
+      if (task.url) {
+        window.open(task.url, "_blank", "noopener,noreferrer");
+      }
+      return;
+    }
+
+    setModal({ mode: "edit", task });
+  }
+
   return (
     <div className="min-h-dvh">
       <CalendarHeader
@@ -551,12 +681,15 @@ export function PlannerApp() {
         currentDate={currentDate}
         loading={loading}
         themeMode={themeMode}
+        googleConfigured={googleSession.configured}
+        googleConnected={googleSession.connected}
         statusOptions={statusOptions}
         hiddenStatuses={hiddenStatuses}
         onViewChange={setView}
         onDateChange={setCurrentDate}
         onRefresh={fetchTasks}
         onToggleTheme={toggleThemeMode}
+        onToggleGoogleCalendar={toggleGoogleCalendar}
         onSettings={() => setSetupOpen(true)}
         onToggleStatus={toggleStatus}
         onShowAllStatuses={showAllStatuses}
@@ -577,7 +710,7 @@ export function PlannerApp() {
           currentDate={currentDate}
           tasks={visibleTasks}
           onCreate={(start, end) => setModal({ mode: "create", start, end })}
-          onEdit={(task) => setModal({ mode: "edit", task })}
+          onEdit={openTask}
           onDateChange={setCurrentDate}
           onMoveTask={moveTask}
         />
@@ -590,7 +723,7 @@ export function PlannerApp() {
             setCurrentDate(start);
             setModal({ mode: "create", start, end });
           }}
-          onEdit={(task) => setModal({ mode: "edit", task })}
+          onEdit={openTask}
         />
       )}
 

@@ -16,6 +16,10 @@ function authSecret() {
   return null;
 }
 
+export function getAuthSecret() {
+  return authSecret();
+}
+
 function sign(value: string) {
   const secret = authSecret();
   if (!secret) {
