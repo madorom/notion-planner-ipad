@@ -479,7 +479,10 @@ export function WeekView({
               ))}
             </div>
 
-            <div className="planner-scroll overflow-auto" onWheel={handleWheel}>
+            <div
+              className="planner-scroll week-time-scroll overflow-auto"
+              onWheel={handleWheel}
+            >
               <div
                 ref={gridRef}
                 className="grid grid-cols-[72px_repeat(7,minmax(128px,1fr))]"

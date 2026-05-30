@@ -70,6 +70,11 @@ button {
   border-radius: 999px;
 }
 
+.week-time-scroll {
+  height: min(936px, max(360px, calc(100dvh - 188px)));
+  overscroll-behavior: contain;
+}
+
 .planner-grid-paper {
   background-image:
     linear-gradient(to right, rgba(95, 107, 122, 0.08) 1px, transparent 1px),
