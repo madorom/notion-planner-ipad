@@ -71,8 +71,14 @@ button {
 }
 
 .week-time-scroll {
-  height: min(936px, max(360px, calc(100dvh - 188px)));
+  height: min(936px, max(320px, calc(100dvh - 204px)));
   overscroll-behavior: contain;
+}
+
+@media (min-width: 768px) {
+  .week-time-scroll {
+    height: min(936px, max(360px, calc(100dvh - 188px)));
+  }
 }
 
 .planner-grid-paper {
