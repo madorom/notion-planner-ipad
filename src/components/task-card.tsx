@@ -245,16 +245,6 @@ export function TaskCard({
         <Clock className="h-3.5 w-3.5" />
         <span>{timeLabel}</span>
       </div>
-      {!compact && task.status ? (
-        <div
-          className={cx(
-            "mt-2 inline-flex max-w-full rounded-md px-2 py-1 text-xs font-semibold",
-            theme.badge,
-          )}
-        >
-          <span className="truncate">{task.status}</span>
-        </div>
-      ) : null}
     </button>
   );
 }
