@@ -2,7 +2,13 @@
 
 import { format, parseISO } from "date-fns";
 import { Clock } from "lucide-react";
-import type { CSSProperties, PointerEvent as ReactPointerEvent } from "react";
+import {
+  useCallback,
+  useEffect,
+  useRef,
+  type CSSProperties,
+  type PointerEvent as ReactPointerEvent,
+} from "react";
 import type { PlannerTask } from "@/lib/types";
 import { cx } from "@/lib/utils";
 
@@ -17,6 +23,9 @@ type TaskCardProps = {
     event: ReactPointerEvent<HTMLButtonElement>,
   ) => void;
 };
+
+const EDIT_OPEN_DELAY_MS = 240;
+const TAP_MOVE_TOLERANCE_PX = 8;
 
 const statusThemes = {
   default: {
@@ -109,12 +118,53 @@ export function TaskCard({
   onClick,
   onPointerDown,
 }: TaskCardProps) {
+  const pendingOpenTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+  const pointerStartRef = useRef<{
+    pointerId: number;
+    x: number;
+    y: number;
+    cancelled: boolean;
+  } | null>(null);
   const theme = statusTheme(task.statusColor);
   const timeLabel = task.isAllDay
     ? "終日"
     : `${format(parseISO(task.start), "HH:mm")}${
         task.end ? `-${format(parseISO(task.end), "HH:mm")}` : ""
       }`;
+
+  const clearPendingOpen = useCallback(() => {
+    if (pendingOpenTimerRef.current) {
+      clearTimeout(pendingOpenTimerRef.current);
+      pendingOpenTimerRef.current = null;
+    }
+  }, []);
+
+  const scheduleOpen = useCallback(() => {
+    clearPendingOpen();
+    pendingOpenTimerRef.current = setTimeout(() => {
+      pendingOpenTimerRef.current = null;
+      onClick(task);
+    }, EDIT_OPEN_DELAY_MS);
+  }, [clearPendingOpen, onClick, task]);
+
+  useEffect(() => clearPendingOpen, [clearPendingOpen]);
+
+  function updatePointerCancellation(event: ReactPointerEvent<HTMLButtonElement>) {
+    const pointerStart = pointerStartRef.current;
+    if (!pointerStart || pointerStart.pointerId !== event.pointerId) {
+      return;
+    }
+
+    const distance = Math.hypot(
+      event.clientX - pointerStart.x,
+      event.clientY - pointerStart.y,
+    );
+
+    if (distance > TAP_MOVE_TOLERANCE_PX) {
+      pointerStart.cancelled = true;
+      clearPendingOpen();
+    }
+  }
 
   return (
     <button
@@ -124,13 +174,49 @@ export function TaskCard({
         ...style,
         touchAction: onPointerDown ? "none" : style?.touchAction,
       }}
-      onPointerDown={(event) => onPointerDown?.(task, event)}
       onClick={(event) => {
+        event.preventDefault();
         event.stopPropagation();
-        if (isDragging) {
+        if (event.detail !== 0 || isDragging) {
           return;
         }
-        onClick(task);
+        scheduleOpen();
+      }}
+      onPointerDown={(event) => {
+        if (event.button !== 0) {
+          return;
+        }
+
+        clearPendingOpen();
+        pointerStartRef.current = {
+          pointerId: event.pointerId,
+          x: event.clientX,
+          y: event.clientY,
+          cancelled: false,
+        };
+        onPointerDown?.(task, event);
+      }}
+      onPointerMove={updatePointerCancellation}
+      onPointerCancel={() => {
+        pointerStartRef.current = null;
+        clearPendingOpen();
+      }}
+      onPointerUp={(event) => {
+        event.preventDefault();
+        event.stopPropagation();
+        if (event.button !== 0) {
+          return;
+        }
+
+        updatePointerCancellation(event);
+        const pointerStart = pointerStartRef.current;
+        pointerStartRef.current = null;
+
+        if (!pointerStart || pointerStart.cancelled || isDragging) {
+          return;
+        }
+
+        scheduleOpen();
       }}
       className={cx(
         "w-full overflow-hidden rounded-lg border border-l-4 text-left shadow-sm transition hover:-translate-y-0.5 hover:shadow-planner-soft active:scale-[0.99]",
