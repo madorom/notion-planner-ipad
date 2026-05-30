@@ -7,12 +7,15 @@ import {
   ChevronRight,
   Filter,
   LogOut,
+  Moon,
   PanelLeftOpen,
   RefreshCw,
   Settings,
+  Sun,
 } from "lucide-react";
 import { formatDateLabel } from "@/lib/calendar";
 import { IconButton } from "@/components/icon-button";
+import type { ThemeMode } from "@/lib/storage";
 import type { StatusFilterOption } from "@/lib/types";
 import { cx } from "@/lib/utils";
 
@@ -20,11 +23,13 @@ type CalendarHeaderProps = {
   view: "week" | "month";
   currentDate: Date;
   loading: boolean;
+  themeMode: ThemeMode;
   statusOptions: StatusFilterOption[];
   hiddenStatuses: string[];
   onViewChange: (view: "week" | "month") => void;
   onDateChange: (date: Date) => void;
   onRefresh: () => void;
+  onToggleTheme: () => void;
   onSettings: () => void;
   onToggleStatus: (status: string) => void;
   onShowAllStatuses: () => void;
@@ -59,11 +64,13 @@ export function CalendarHeader({
   view,
   currentDate,
   loading,
+  themeMode,
   statusOptions,
   hiddenStatuses,
   onViewChange,
   onDateChange,
   onRefresh,
+  onToggleTheme,
   onSettings,
   onToggleStatus,
   onShowAllStatuses,
@@ -74,6 +81,8 @@ export function CalendarHeader({
   const nextLabel = view === "week" ? "翌日" : "次の月";
   const hiddenStatusSet = new Set(hiddenStatuses);
   const activeFilterCount = hiddenStatuses.length;
+  const themeLabel =
+    themeMode === "dark" ? "ホワイトモード" : "ダークモード";
 
   return (
     <header className="sticky top-0 z-30 border-b border-[color:var(--planner-border)] bg-[color:var(--planner-bg)]/92 px-3 py-2 backdrop-blur md:px-6 md:py-3">
@@ -166,6 +175,17 @@ export function CalendarHeader({
               className="px-2 md:px-3"
             >
               <RefreshCw className={`h-5 w-5 ${loading ? "animate-spin" : ""}`} />
+            </IconButton>
+            <IconButton
+              label={themeLabel}
+              onClick={onToggleTheme}
+              className="px-2 md:px-3"
+            >
+              {themeMode === "dark" ? (
+                <Sun className="h-5 w-5" />
+              ) : (
+                <Moon className="h-5 w-5" />
+              )}
             </IconButton>
             <IconButton label="設定" onClick={onSettings} className="px-2 md:px-3">
               <Settings className="h-5 w-5" />

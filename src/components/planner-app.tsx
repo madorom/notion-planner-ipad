@@ -11,9 +11,13 @@ import { WeekView } from "@/components/week-view";
 import { getViewRange } from "@/lib/calendar";
 import {
   clearConfig,
+  applyThemeMode,
   loadConfig,
   loadHiddenStatuses,
+  loadThemeMode,
   saveHiddenStatuses,
+  saveThemeMode,
+  type ThemeMode,
 } from "@/lib/storage";
 import type {
   AppConfig,
@@ -82,15 +86,19 @@ export function PlannerApp() {
   const [undoStack, setUndoStack] = useState<TaskHistoryAction[]>([]);
   const [redoStack, setRedoStack] = useState<TaskHistoryAction[]>([]);
   const [historyBusy, setHistoryBusy] = useState(false);
+  const [themeMode, setThemeMode] = useState<ThemeMode>("light");
 
   useEffect(() => {
     let active = true;
 
     async function bootstrap() {
       const stored = loadConfig();
+      const nextThemeMode = loadThemeMode() ?? "light";
       setConfig(stored);
       setSetupOpen(!stored);
       setHiddenStatuses(loadHiddenStatuses());
+      setThemeMode(nextThemeMode);
+      applyThemeMode(nextThemeMode);
 
       try {
         const response = await fetch("/api/auth/session", {
@@ -227,6 +235,14 @@ export function PlannerApp() {
   function showAllStatuses() {
     saveHiddenStatuses([]);
     setHiddenStatuses([]);
+  }
+
+  function toggleThemeMode() {
+    setThemeMode((current) => {
+      const next = current === "dark" ? "light" : "dark";
+      saveThemeMode(next);
+      return next;
+    });
   }
 
   function pushHistory(action: TaskHistoryAction) {
@@ -521,11 +537,13 @@ export function PlannerApp() {
         view={view}
         currentDate={currentDate}
         loading={loading}
+        themeMode={themeMode}
         statusOptions={statusOptions}
         hiddenStatuses={hiddenStatuses}
         onViewChange={setView}
         onDateChange={setCurrentDate}
         onRefresh={fetchTasks}
+        onToggleTheme={toggleThemeMode}
         onSettings={() => setSetupOpen(true)}
         onToggleStatus={toggleStatus}
         onShowAllStatuses={showAllStatuses}

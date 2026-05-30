@@ -2,6 +2,9 @@ import type { AppConfig } from "@/lib/types";
 
 const CONFIG_KEY = "notion-planner-ipad:v1";
 const HIDDEN_STATUSES_KEY = "notion-planner-ipad:hidden-statuses:v1";
+const THEME_MODE_KEY = "notion-planner-ipad:theme:v1";
+
+export type ThemeMode = "light" | "dark";
 
 export function loadConfig(): AppConfig | null {
   if (typeof window === "undefined") {
@@ -58,4 +61,30 @@ export function loadHiddenStatuses() {
 
 export function saveHiddenStatuses(statuses: string[]) {
   window.localStorage.setItem(HIDDEN_STATUSES_KEY, JSON.stringify(statuses));
+}
+
+function isThemeMode(value: string | null): value is ThemeMode {
+  return value === "light" || value === "dark";
+}
+
+export function loadThemeMode(): ThemeMode | null {
+  if (typeof window === "undefined") {
+    return null;
+  }
+
+  const stored = window.localStorage.getItem(THEME_MODE_KEY);
+  return isThemeMode(stored) ? stored : null;
+}
+
+export function applyThemeMode(themeMode: ThemeMode) {
+  if (typeof document === "undefined") {
+    return;
+  }
+
+  document.documentElement.dataset.theme = themeMode;
+}
+
+export function saveThemeMode(themeMode: ThemeMode) {
+  window.localStorage.setItem(THEME_MODE_KEY, themeMode);
+  applyThemeMode(themeMode);
 }
