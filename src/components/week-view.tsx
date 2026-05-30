@@ -28,6 +28,7 @@ import {
 } from "@/lib/calendar";
 import type { PlannerTask } from "@/lib/types";
 import { TaskCard } from "@/components/task-card";
+import { useHorizontalDateSwipe } from "@/lib/use-horizontal-date-swipe";
 import { clamp } from "@/lib/utils";
 
 type WeekViewProps = {
@@ -196,6 +197,14 @@ export function WeekView({
   const [slideDirection, setSlideDirection] = useState<"next" | "previous">("next");
   const [wheelOffset, setWheelOffset] = useState(0);
   const [dragPreview, setDragPreview] = useState<DragPreview | null>(null);
+  const {
+    offset: swipeOffset,
+    isClickSuppressed: isSwipeClickSuppressed,
+    swipeHandlers,
+  } = useHorizontalDateSwipe({
+    disabled: Boolean(dragSessionRef.current?.active),
+    onSwipe: (direction) => onDateChange(addDays(currentDate, direction)),
+  });
 
   const dragPointToPreview = useCallback(
     (
@@ -322,6 +331,10 @@ export function WeekView({
   }, [dragPointToPreview, onMoveTask]);
 
   function handleColumnClick(day: Date, event: MouseEvent<HTMLDivElement>) {
+    if (isSwipeClickSuppressed()) {
+      return;
+    }
+
     const rect = event.currentTarget.getBoundingClientRect();
     const y = clamp(event.clientY - rect.top, 0, bodyHeight);
     const rawMinutes = (y / HOUR_HEIGHT) * 60;
@@ -444,7 +457,10 @@ export function WeekView({
         >
           <div
             className="week-gesture-layer"
-            style={{ transform: `translate3d(${wheelOffset}px, 0, 0)` }}
+            style={{
+              transform: `translate3d(${wheelOffset + swipeOffset}px, 0, 0)`,
+            }}
+            {...swipeHandlers}
           >
             <div className="grid grid-cols-[72px_repeat(7,minmax(128px,1fr))] border-b border-[color:var(--planner-border)] bg-[color:var(--planner-surface)]">
               <div className="border-r border-[color:var(--planner-border)]" />

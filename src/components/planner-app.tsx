@@ -395,6 +395,7 @@ export function PlannerApp() {
         <MonthView
           currentDate={currentDate}
           tasks={visibleTasks}
+          onDateChange={setCurrentDate}
           onCreate={(start, end) => {
             setCurrentDate(start);
             setModal({ mode: "create", start, end });

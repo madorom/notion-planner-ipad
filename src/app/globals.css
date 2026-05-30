@@ -77,25 +77,29 @@ button {
   background-size: 100% 72px;
 }
 
+.calendar-slide-layer,
 .week-slide-layer {
-  --week-slide-from: 24px;
-  animation: week-slide-in 240ms cubic-bezier(0.2, 0.8, 0.2, 1) both;
+  --calendar-slide-from: 24px;
+  animation: calendar-slide-in 240ms cubic-bezier(0.2, 0.8, 0.2, 1) both;
   will-change: opacity, transform;
 }
 
+.calendar-slide-layer[data-direction="previous"],
 .week-slide-layer[data-direction="previous"] {
-  --week-slide-from: -24px;
+  --calendar-slide-from: -24px;
 }
 
+.calendar-gesture-layer,
 .week-gesture-layer {
+  touch-action: pan-y;
   transition: transform 110ms cubic-bezier(0.2, 0.8, 0.2, 1);
   will-change: transform;
 }
 
-@keyframes week-slide-in {
+@keyframes calendar-slide-in {
   from {
     opacity: 0.55;
-    transform: translate3d(var(--week-slide-from), 0, 0);
+    transform: translate3d(var(--calendar-slide-from), 0, 0);
   }
 
   to {
@@ -105,10 +109,12 @@ button {
 }
 
 @media (prefers-reduced-motion: reduce) {
+  .calendar-slide-layer,
   .week-slide-layer {
     animation: none;
   }
 
+  .calendar-gesture-layer,
   .week-gesture-layer {
     transition: none;
   }
