@@ -1,5 +1,6 @@
 "use client";
 
+import { addDays } from "date-fns";
 import { useCallback, useEffect, useMemo, useState } from "react";
 import { AlertCircle, LoaderCircle, Redo2, Undo2 } from "lucide-react";
 import { CalendarHeader } from "@/components/calendar-header";
@@ -53,6 +54,7 @@ type TaskHistoryAction =
     };
 
 const HISTORY_LIMIT = 30;
+const WEEK_PREVIEW_DAY_BUFFER = 1;
 
 function resolveStatusProperty(config: AppConfig | null): NotionProperty | undefined {
   if (!config) {
@@ -123,7 +125,18 @@ export function PlannerApp() {
     };
   }, []);
 
-  const range = useMemo(() => getViewRange(view, currentDate), [view, currentDate]);
+  const range = useMemo(() => {
+    const nextRange = getViewRange(view, currentDate);
+
+    if (view === "week") {
+      return {
+        start: addDays(nextRange.start, -WEEK_PREVIEW_DAY_BUFFER),
+        end: addDays(nextRange.end, WEEK_PREVIEW_DAY_BUFFER),
+      };
+    }
+
+    return nextRange;
+  }, [view, currentDate]);
 
   const fetchTasks = useCallback(async () => {
     if (!config || authStatus !== "authenticated") {
