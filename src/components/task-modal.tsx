@@ -14,6 +14,7 @@ import type {
   TaskInput,
 } from "@/lib/types";
 import { IconButton } from "@/components/icon-button";
+import { cx } from "@/lib/utils";
 
 type ModalState =
   | {
@@ -93,6 +94,7 @@ export function TaskModal({
   const hasMemo = Boolean(config.mapping.memo);
   const hasTags = Boolean(config.mapping.tags);
   const existingTask = state.mode === "edit" ? state.task : undefined;
+  const isSidePanel = state.mode === "edit";
 
   async function submit(event: FormEvent<HTMLFormElement>) {
     event.preventDefault();
@@ -130,12 +132,30 @@ export function TaskModal({
   }
 
   return (
-    <div className="fixed inset-0 z-50 flex items-end justify-center bg-black/35 p-3 backdrop-blur-sm md:items-center md:p-6">
+    <div
+      className={cx(
+        "fixed inset-0 z-50 bg-black/35 backdrop-blur-sm",
+        isSidePanel
+          ? "flex justify-end"
+          : "flex items-end justify-center p-3 md:items-center md:p-6",
+      )}
+    >
       <form
         onSubmit={submit}
-        className="max-h-[92dvh] w-full max-w-2xl overflow-auto rounded-xl border border-[color:var(--planner-border)] bg-[color:var(--planner-surface)] p-5 shadow-planner md:p-6"
+        className={cx(
+          "w-full overflow-auto border border-[color:var(--planner-border)] bg-[color:var(--planner-surface)] p-5 shadow-planner md:p-6",
+          isSidePanel
+            ? "h-dvh max-w-[540px] rounded-none border-y-0 border-r-0"
+            : "max-h-[92dvh] max-w-2xl rounded-xl",
+        )}
       >
-        <div className="mb-5 flex items-center justify-between gap-3">
+        <div
+          className={cx(
+            "mb-5 flex items-center justify-between gap-3",
+            isSidePanel &&
+              "sticky top-0 z-10 -mx-5 -mt-5 border-b border-[color:var(--planner-border)] bg-[color:var(--planner-surface)] px-5 py-4 md:-mx-6 md:-mt-6 md:px-6",
+          )}
+        >
           <div>
             <p className="text-sm font-bold text-mint-600">
               {state.mode === "create" ? "新規タスク" : "タスク編集"}
