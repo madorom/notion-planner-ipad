@@ -579,6 +579,19 @@ export async function updateTask(
   return pageToTask(page, mapping);
 }
 
+export async function updateTaskTrash(
+  token: string,
+  pageId: string,
+  inTrash: boolean,
+) {
+  await notionFetch<NotionPage>(token, `/pages/${extractNotionId(pageId)}`, {
+    method: "PATCH",
+    body: JSON.stringify({
+      in_trash: inTrash,
+    }),
+  });
+}
+
 export function errorResponse(error: unknown) {
   if (error instanceof NotionApiError) {
     return Response.json(

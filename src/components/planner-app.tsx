@@ -1,7 +1,7 @@
 "use client";
 
 import { useCallback, useEffect, useMemo, useState } from "react";
-import { AlertCircle, RotateCcw, X } from "lucide-react";
+import { AlertCircle, LoaderCircle, Redo2, Undo2 } from "lucide-react";
 import { CalendarHeader } from "@/components/calendar-header";
 import { LoginPanel } from "@/components/login-panel";
 import { MonthView } from "@/components/month-view";
@@ -37,10 +37,18 @@ type ModalState =
 
 type AuthStatus = "checking" | "authenticated" | "guest";
 
-type MoveUndoState = {
-  previousTask: PlannerTask;
-  movedTask: PlannerTask;
-};
+type TaskHistoryAction =
+  | {
+      type: "create";
+      task: PlannerTask;
+    }
+  | {
+      type: "update";
+      before: PlannerTask;
+      after: PlannerTask;
+    };
+
+const HISTORY_LIMIT = 30;
 
 function resolveStatusProperty(config: AppConfig | null): NotionProperty | undefined {
   if (!config) {
@@ -71,7 +79,9 @@ export function PlannerApp() {
   const [error, setError] = useState("");
   const [modal, setModal] = useState<ModalState>(null);
   const [hiddenStatuses, setHiddenStatuses] = useState<string[]>([]);
-  const [moveUndo, setMoveUndo] = useState<MoveUndoState | null>(null);
+  const [undoStack, setUndoStack] = useState<TaskHistoryAction[]>([]);
+  const [redoStack, setRedoStack] = useState<TaskHistoryAction[]>([]);
+  const [historyBusy, setHistoryBusy] = useState(false);
 
   useEffect(() => {
     let active = true;
@@ -219,6 +229,11 @@ export function PlannerApp() {
     setHiddenStatuses([]);
   }
 
+  function pushHistory(action: TaskHistoryAction) {
+    setUndoStack((current) => [...current, action].slice(-HISTORY_LIMIT));
+    setRedoStack([]);
+  }
+
   function taskInputFromTask(task: PlannerTask, start?: string, end?: string): TaskInput {
     return {
       title: task.title,
@@ -267,6 +282,34 @@ export function PlannerApp() {
     return data.task;
   }
 
+  async function setTaskTrash(task: PlannerTask, inTrash: boolean) {
+    const response = await fetch(
+      `/api/notion/tasks/${encodeURIComponent(task.id)}`,
+      {
+        method: "PUT",
+        headers: {
+          "Content-Type": "application/json",
+        },
+        body: JSON.stringify({ inTrash }),
+      },
+    );
+    const data = (await response.json()) as {
+      error?: string;
+    };
+
+    if (!response.ok) {
+      if (response.status === 401) {
+        setAuthStatus("guest");
+      }
+      throw new Error(
+        data.error ??
+          (inTrash
+            ? "Notionのタスクを取り消せませんでした。"
+            : "Notionのタスクを復元できませんでした。"),
+      );
+    }
+  }
+
   async function saveTask(task: TaskInput, existingTask?: PlannerTask) {
     if (!config) {
       return;
@@ -276,8 +319,21 @@ export function PlannerApp() {
     setError("");
 
     try {
-      await persistTask(task, existingTask);
-      setMoveUndo(null);
+      const savedTask = await persistTask(task, existingTask);
+      if (savedTask) {
+        pushHistory(
+          existingTask
+            ? {
+                type: "update",
+                before: existingTask,
+                after: savedTask,
+              }
+            : {
+                type: "create",
+                task: savedTask,
+              },
+        );
+      }
       setModal(null);
       await fetchTasks();
     } catch (saveError) {
@@ -307,13 +363,14 @@ export function PlannerApp() {
     setError("");
 
     try {
-      await persistTask(
+      const savedTask = await persistTask(
         taskInputFromTask(task, movedTask.start, movedTask.end),
         task,
       );
-      setMoveUndo({
-        previousTask: task,
-        movedTask,
+      pushHistory({
+        type: "update",
+        before: task,
+        after: savedTask ?? movedTask,
       });
       await fetchTasks();
     } catch (moveError) {
@@ -328,34 +385,86 @@ export function PlannerApp() {
     }
   }
 
-  async function undoLastMove() {
-    if (!moveUndo) {
+  async function undoLastAction() {
+    const action = undoStack.at(-1);
+    if (!action || historyBusy) {
       return;
     }
 
-    const undoState = moveUndo;
     const originalTasks = tasks;
-    setMoveUndo(null);
-    setTasks((current) =>
-      current.map((item) =>
-        item.id === undoState.previousTask.id ? undoState.previousTask : item,
-      ),
-    );
+    setHistoryBusy(true);
     setSaving(true);
     setError("");
 
     try {
-      await persistTask(taskInputFromTask(undoState.previousTask), undoState.previousTask);
+      if (action.type === "create") {
+        setTasks((current) =>
+          current.filter((item) => item.id !== action.task.id),
+        );
+        await setTaskTrash(action.task, true);
+      } else {
+        setTasks((current) =>
+          current.map((item) =>
+            item.id === action.before.id ? action.before : item,
+          ),
+        );
+        await persistTask(taskInputFromTask(action.before), action.before);
+      }
+      setUndoStack((current) => current.slice(0, -1));
+      setRedoStack((current) => [...current, action].slice(-HISTORY_LIMIT));
       await fetchTasks();
-    } catch (undoError) {
+    } catch (historyError) {
       setTasks(originalTasks);
-      setMoveUndo(undoState);
       setError(
-        undoError instanceof Error
-          ? undoError.message
-          : "元の位置へ戻せませんでした。",
+        historyError instanceof Error
+          ? historyError.message
+          : "元に戻せませんでした。",
       );
     } finally {
+      setHistoryBusy(false);
+      setSaving(false);
+    }
+  }
+
+  async function redoLastAction() {
+    const action = redoStack.at(-1);
+    if (!action || historyBusy) {
+      return;
+    }
+
+    const originalTasks = tasks;
+    setHistoryBusy(true);
+    setSaving(true);
+    setError("");
+
+    try {
+      if (action.type === "create") {
+        setTasks((current) =>
+          current.some((item) => item.id === action.task.id)
+            ? current
+            : [...current, action.task],
+        );
+        await setTaskTrash(action.task, false);
+      } else {
+        setTasks((current) =>
+          current.map((item) =>
+            item.id === action.after.id ? action.after : item,
+          ),
+        );
+        await persistTask(taskInputFromTask(action.after), action.after);
+      }
+      setRedoStack((current) => current.slice(0, -1));
+      setUndoStack((current) => [...current, action].slice(-HISTORY_LIMIT));
+      await fetchTasks();
+    } catch (historyError) {
+      setTasks(originalTasks);
+      setError(
+        historyError instanceof Error
+          ? historyError.message
+          : "やり直しできませんでした。",
+      );
+    } finally {
+      setHistoryBusy(false);
       setSaving(false);
     }
   }
@@ -364,6 +473,8 @@ export function PlannerApp() {
     await fetch("/api/auth/logout", { method: "POST" }).catch(() => undefined);
     setTasks([]);
     setError("");
+    setUndoStack([]);
+    setRedoStack([]);
     setAuthStatus("guest");
   }
 
@@ -393,11 +504,16 @@ export function PlannerApp() {
         initialConfig={config}
         onReady={(nextConfig) => {
           setConfig(nextConfig);
+          setUndoStack([]);
+          setRedoStack([]);
           setSetupOpen(false);
         }}
       />
     );
   }
+
+  const canUndo = undoStack.length > 0;
+  const canRedo = redoStack.length > 0;
 
   return (
     <div className="min-h-dvh">
@@ -453,11 +569,42 @@ export function PlannerApp() {
           onClick={() => {
             clearConfig();
             setConfig(null);
+            setUndoStack([]);
+            setRedoStack([]);
             setSetupOpen(true);
           }}
           className="min-h-12 rounded-lg bg-ink px-4 text-sm font-bold text-white shadow-planner dark:bg-mint-500"
         >
           設定
+        </button>
+      </div>
+
+      <div className="fixed bottom-4 left-4 z-40 flex items-center gap-2 rounded-xl border border-[color:var(--planner-border)] bg-[color:var(--planner-surface)] p-1.5 shadow-planner">
+        <button
+          type="button"
+          aria-label="元に戻す"
+          title="元に戻す"
+          onClick={undoLastAction}
+          disabled={!canUndo || historyBusy || saving}
+          className="inline-flex min-h-11 items-center justify-center gap-2 rounded-lg px-3 text-sm font-bold transition active:scale-[0.98] disabled:cursor-not-allowed disabled:opacity-40"
+        >
+          {historyBusy ? (
+            <LoaderCircle className="h-5 w-5 animate-spin" />
+          ) : (
+            <Undo2 className="h-5 w-5" />
+          )}
+          <span>戻す</span>
+        </button>
+        <button
+          type="button"
+          aria-label="次に進む"
+          title="次に進む"
+          onClick={redoLastAction}
+          disabled={!canRedo || historyBusy || saving}
+          className="inline-flex min-h-11 items-center justify-center gap-2 rounded-lg px-3 text-sm font-bold transition active:scale-[0.98] disabled:cursor-not-allowed disabled:opacity-40"
+        >
+          <Redo2 className="h-5 w-5" />
+          <span>進む</span>
         </button>
       </div>
 
@@ -469,36 +616,6 @@ export function PlannerApp() {
           onClose={() => setModal(null)}
           onSave={saveTask}
         />
-      ) : null}
-
-      {moveUndo ? (
-        <div className="fixed bottom-4 left-1/2 z-50 flex w-[min(92vw,520px)] -translate-x-1/2 items-center gap-3 rounded-xl border border-[color:var(--planner-border)] bg-[color:var(--planner-surface)] px-4 py-3 shadow-planner">
-          <div className="min-w-0 flex-1">
-            <p className="truncate text-sm font-bold">
-              {moveUndo.movedTask.title}
-            </p>
-            <p className="text-xs font-semibold text-[color:var(--planner-soft)]">
-              移動しました
-            </p>
-          </div>
-          <button
-            type="button"
-            onClick={undoLastMove}
-            disabled={saving}
-            className="inline-flex min-h-10 shrink-0 items-center justify-center gap-2 rounded-lg bg-ink px-3 text-sm font-bold text-white transition active:scale-[0.99] disabled:cursor-not-allowed disabled:opacity-50 dark:bg-mint-500"
-          >
-            <RotateCcw className="h-4 w-4" />
-            元に戻す
-          </button>
-          <button
-            type="button"
-            aria-label="元に戻す通知を閉じる"
-            onClick={() => setMoveUndo(null)}
-            className="inline-flex h-10 w-10 shrink-0 items-center justify-center rounded-lg border border-[color:var(--planner-border)] text-[color:var(--planner-soft)] transition active:scale-[0.98]"
-          >
-            <X className="h-4 w-4" />
-          </button>
-        </div>
       ) : null}
     </div>
   );
