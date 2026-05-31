@@ -215,6 +215,8 @@ export function WeekView({
   );
   const bodyHeight = hours.length * HOUR_HEIGHT;
   const gridRef = useRef<HTMLDivElement | null>(null);
+  const horizontalScrollRefs = useRef<Array<HTMLDivElement | null>>([]);
+  const horizontalScrollLeftRef = useRef(0);
   const timeScrollRefs = useRef<Array<HTMLDivElement | null>>([]);
   const timeScrollTopRef = useRef(0);
   const wheelDeltaRef = useRef(0);
@@ -320,6 +322,20 @@ export function WeekView({
     }
   }
 
+  function syncHorizontalScrollLeft(scrollLeft: number, source?: HTMLDivElement) {
+    horizontalScrollLeftRef.current = scrollLeft;
+
+    for (const horizontalScroll of horizontalScrollRefs.current) {
+      if (!horizontalScroll || horizontalScroll === source) {
+        continue;
+      }
+
+      if (Math.abs(horizontalScroll.scrollLeft - scrollLeft) > 1) {
+        horizontalScroll.scrollLeft = scrollLeft;
+      }
+    }
+  }
+
   function setTimeScrollNode(index: number, node: HTMLDivElement | null) {
     timeScrollRefs.current[index] = node;
 
@@ -328,8 +344,17 @@ export function WeekView({
     }
   }
 
+  function setHorizontalScrollNode(index: number, node: HTMLDivElement | null) {
+    horizontalScrollRefs.current[index] = node;
+
+    if (node) {
+      node.scrollLeft = horizontalScrollLeftRef.current;
+    }
+  }
+
   useLayoutEffect(() => {
     syncTimeScrollTop(timeScrollTopRef.current);
+    syncHorizontalScrollLeft(horizontalScrollLeftRef.current);
   }, [currentDate]);
 
   useEffect(() => {
@@ -474,6 +499,13 @@ export function WeekView({
     syncTimeScrollTop(event.currentTarget.scrollTop, event.currentTarget);
   }
 
+  function handleHorizontalScroll(event: UIEvent<HTMLDivElement>) {
+    syncHorizontalScrollLeft(
+      event.currentTarget.scrollLeft,
+      event.currentTarget,
+    );
+  }
+
   function handleWheel(event: WheelEvent<HTMLDivElement>) {
     if (dragSessionRef.current?.active) {
       return;
@@ -490,7 +522,24 @@ export function WeekView({
       return;
     }
 
+    const maxScrollLeft = Math.max(
+      0,
+      event.currentTarget.scrollWidth - event.currentTarget.clientWidth,
+    );
+    const canScrollInsideCalendar =
+      (horizontalDelta > 0 &&
+        event.currentTarget.scrollLeft < maxScrollLeft - 2) ||
+      (horizontalDelta < 0 && event.currentTarget.scrollLeft > 2);
+
+    if (canScrollInsideCalendar) {
+      wheelDeltaRef.current = 0;
+      wheelOffsetRef.current = 0;
+      setWheelOffset(0);
+      return;
+    }
+
     event.preventDefault();
+    syncHorizontalScrollLeft(horizontalDelta > 0 ? maxScrollLeft : 0);
     wheelDeltaRef.current += horizontalDelta;
     wheelOffsetRef.current = clamp(
       wheelOffsetRef.current - horizontalDelta,
@@ -593,7 +642,9 @@ export function WeekView({
         className={`w-full shrink-0 ${isCurrentPage ? "" : "pointer-events-none opacity-80"}`}
       >
         <div
+          ref={(node) => setHorizontalScrollNode(pageIndex, node)}
           className="planner-scroll week-horizontal-scroll overflow-x-auto"
+          onScroll={handleHorizontalScroll}
           onWheel={isCurrentPage ? handleWheel : undefined}
         >
           <div className="week-table min-w-[968px]">
