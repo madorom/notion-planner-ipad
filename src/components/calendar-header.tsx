@@ -121,10 +121,6 @@ export function CalendarHeader({
   const selectedGoogleCalendars = googleCalendars.filter((calendar) =>
     selectedGoogleCalendarSet.has(calendar.id),
   );
-  const googleCalendarPickerLabel =
-    selectedGoogleCalendars.length > 0
-      ? `Googleカレンダー ${selectedGoogleCalendars.length}件`
-      : "Googleカレンダー選択";
 
   useEffect(() => {
     if (!actionsMenuOpen) {
@@ -210,7 +206,7 @@ export function CalendarHeader({
               </IconButton>
               <div
                 className={cx(
-                  "fixed left-3 right-3 top-[96px] z-50 rounded-xl border border-[color:var(--planner-border)] bg-[color:var(--planner-surface)] p-3 shadow-planner transition md:absolute md:left-auto md:right-0 md:top-[calc(100%+8px)] md:w-[min(92vw,420px)]",
+                  "fixed left-3 right-3 top-[96px] z-50 max-h-[calc(100dvh-112px)] overflow-y-auto rounded-xl border border-[color:var(--planner-border)] bg-[color:var(--planner-surface)] p-3 shadow-planner transition planner-scroll md:absolute md:left-auto md:right-0 md:top-[calc(100%+8px)] md:w-[min(92vw,420px)]",
                   actionsMenuOpen
                     ? "visible opacity-100"
                     : "invisible pointer-events-none opacity-0",
@@ -264,6 +260,96 @@ export function CalendarHeader({
                     <span className="min-w-0 flex-1 truncate">ログアウト</span>
                   </button>
                 </div>
+
+                {googleConnected ? (
+                  <div className="border-b border-[color:var(--planner-border)] py-3">
+                    <div className="mb-3 flex items-center justify-between gap-3">
+                      <p className="flex items-center gap-2 text-sm font-bold">
+                        <CalendarCheck className="h-4 w-4" />
+                        Googleカレンダー
+                        <span className="text-xs text-[color:var(--planner-soft)]">
+                          {selectedGoogleCalendars.length}件
+                        </span>
+                      </p>
+                      <button
+                        type="button"
+                        onClick={onShowAllGoogleCalendars}
+                        disabled={googleCalendars.length === 0}
+                        className="min-h-9 rounded-lg px-3 text-xs font-bold text-mint-600 disabled:opacity-45"
+                      >
+                        すべて表示
+                      </button>
+                    </div>
+                    <div className="grid max-h-[34dvh] gap-2 overflow-auto planner-scroll">
+                      {googleCalendarsLoading ? (
+                        <p className="rounded-lg bg-[color:var(--planner-surface-muted)] px-3 py-2 text-sm text-[color:var(--planner-soft)]">
+                          読み込み中
+                        </p>
+                      ) : googleCalendars.length > 0 ? (
+                        googleCalendars.map((calendar) => {
+                          const checked = selectedGoogleCalendarSet.has(
+                            calendar.id,
+                          );
+                          const color = safeHexColor(
+                            googleCalendarColors[calendar.id] ??
+                              calendar.backgroundColor,
+                          );
+
+                          return (
+                            <div
+                              key={calendar.id}
+                              className={cx(
+                                "flex min-h-12 items-center gap-3 rounded-lg border px-3 py-2 transition",
+                                checked
+                                  ? "border-[color:var(--planner-border)] bg-[color:var(--planner-surface-muted)]"
+                                  : "border-transparent opacity-55",
+                              )}
+                            >
+                              <label className="flex min-w-0 flex-1 items-center gap-3">
+                                <input
+                                  type="checkbox"
+                                  checked={checked}
+                                  disabled={
+                                    checked &&
+                                    selectedGoogleCalendarIds.length === 1
+                                  }
+                                  onChange={() =>
+                                    onToggleGoogleCalendarId(calendar.id)
+                                  }
+                                  className="h-5 w-5 shrink-0 accent-mint-500 disabled:opacity-45"
+                                />
+                                <span
+                                  className="h-3.5 w-3.5 shrink-0 rounded-full"
+                                  style={{ backgroundColor: color }}
+                                />
+                                <span className="min-w-0 flex-1 truncate text-sm font-semibold">
+                                  {calendar.summary}
+                                  {calendar.primary ? "（メイン）" : ""}
+                                </span>
+                              </label>
+                              <input
+                                type="color"
+                                value={color}
+                                onChange={(event) =>
+                                  onGoogleCalendarColorChange(
+                                    calendar.id,
+                                    event.target.value,
+                                  )
+                                }
+                                aria-label={`${calendar.summary}の色`}
+                                className="h-9 w-11 shrink-0 cursor-pointer rounded-md border border-[color:var(--planner-border)] bg-transparent p-1"
+                              />
+                            </div>
+                          );
+                        })
+                      ) : (
+                        <p className="rounded-lg bg-[color:var(--planner-surface-muted)] px-3 py-2 text-sm text-[color:var(--planner-soft)]">
+                          カレンダーなし
+                        </p>
+                      )}
+                    </div>
+                  </div>
+                ) : null}
 
                 <div className="pt-3">
                   <div className="mb-3 flex items-center justify-between gap-3">
@@ -365,97 +451,6 @@ export function CalendarHeader({
               月
             </button>
           </div>
-
-          {googleConnected ? (
-            <div className="group relative col-span-2 md:col-span-1">
-              <IconButton
-                label={googleCalendarPickerLabel}
-                active={selectedGoogleCalendars.length > 0}
-                className="w-full gap-2 px-3 md:min-w-[220px]"
-              >
-                <CalendarCheck className="h-5 w-5" />
-                <span className="truncate">
-                  {googleCalendarsLoading
-                    ? "読込中"
-                    : `${Math.max(selectedGoogleCalendars.length, selectedGoogleCalendarIds.length)}件`}
-                </span>
-              </IconButton>
-              <div className="invisible fixed left-3 right-3 top-[148px] z-50 rounded-xl border border-[color:var(--planner-border)] bg-[color:var(--planner-surface)] p-3 opacity-0 shadow-planner transition group-focus-within:visible group-focus-within:opacity-100 group-hover:visible group-hover:opacity-100 md:absolute md:left-auto md:right-0 md:top-[calc(100%+8px)] md:w-[min(92vw,420px)]">
-                <div className="mb-3 flex items-center justify-between gap-3">
-                  <p className="text-sm font-bold">Googleカレンダー</p>
-                  <button
-                    type="button"
-                    onClick={onShowAllGoogleCalendars}
-                    disabled={googleCalendars.length === 0}
-                    className="min-h-9 rounded-lg px-3 text-xs font-bold text-mint-600 disabled:opacity-45"
-                  >
-                    すべて表示
-                  </button>
-                </div>
-                <div className="grid max-h-[54dvh] gap-2 overflow-auto planner-scroll">
-                  {googleCalendarsLoading ? (
-                    <p className="rounded-lg bg-[color:var(--planner-surface-muted)] px-3 py-2 text-sm text-[color:var(--planner-soft)]">
-                      読み込み中
-                    </p>
-                  ) : googleCalendars.length > 0 ? (
-                    googleCalendars.map((calendar) => {
-                      const checked = selectedGoogleCalendarSet.has(calendar.id);
-                      const color = safeHexColor(
-                        googleCalendarColors[calendar.id] ??
-                          calendar.backgroundColor,
-                      );
-
-                      return (
-                        <div
-                          key={calendar.id}
-                          className={cx(
-                            "flex min-h-12 items-center gap-3 rounded-lg border px-3 py-2 transition",
-                            checked
-                              ? "border-[color:var(--planner-border)] bg-[color:var(--planner-surface-muted)]"
-                              : "border-transparent opacity-55",
-                          )}
-                        >
-                          <label className="flex min-w-0 flex-1 items-center gap-3">
-                            <input
-                              type="checkbox"
-                              checked={checked}
-                              disabled={checked && selectedGoogleCalendarIds.length === 1}
-                              onChange={() => onToggleGoogleCalendarId(calendar.id)}
-                              className="h-5 w-5 shrink-0 accent-mint-500 disabled:opacity-45"
-                            />
-                            <span
-                              className="h-3.5 w-3.5 shrink-0 rounded-full"
-                              style={{ backgroundColor: color }}
-                            />
-                            <span className="min-w-0 flex-1 truncate text-sm font-semibold">
-                              {calendar.summary}
-                              {calendar.primary ? "（メイン）" : ""}
-                            </span>
-                          </label>
-                          <input
-                            type="color"
-                            value={color}
-                            onChange={(event) =>
-                              onGoogleCalendarColorChange(
-                                calendar.id,
-                                event.target.value,
-                              )
-                            }
-                            aria-label={`${calendar.summary}の色`}
-                            className="h-9 w-11 shrink-0 cursor-pointer rounded-md border border-[color:var(--planner-border)] bg-transparent p-1"
-                          />
-                        </div>
-                      );
-                    })
-                  ) : (
-                    <p className="rounded-lg bg-[color:var(--planner-surface-muted)] px-3 py-2 text-sm text-[color:var(--planner-soft)]">
-                      カレンダーなし
-                    </p>
-                  )}
-                </div>
-              </div>
-            </div>
-          ) : null}
         </div>
       </div>
     </header>
