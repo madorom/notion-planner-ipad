@@ -188,6 +188,7 @@ export function sanitizeUserSettings(value: unknown): UserSettings | null {
       typeof value.activeNotionDataSourceId === "string"
         ? value.activeNotionDataSourceId
         : null,
+    selectedNotionDataSourceIds: stringArray(value.selectedNotionDataSourceIds),
     hiddenStatuses: stringArray(value.hiddenStatuses),
     showAllDayTasks: value.showAllDayTasks !== false,
     themeMode,

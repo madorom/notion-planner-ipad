@@ -8,6 +8,7 @@ import {
   CalendarX,
   ChevronLeft,
   ChevronRight,
+  Database,
   Eye,
   Filter,
   LogOut,
@@ -21,9 +22,14 @@ import {
 } from "lucide-react";
 import { formatDateLabel, startOfPlannerWeek } from "@/lib/calendar";
 import { IconButton } from "@/components/icon-button";
+import { appConfigKey } from "@/lib/storage";
 import type { InteractionMode, ThemeMode } from "@/lib/storage";
-import type { GoogleCalendarOption, StatusFilterOption } from "@/lib/types";
-import { cx } from "@/lib/utils";
+import type {
+  AppConfig,
+  GoogleCalendarOption,
+  StatusFilterOption,
+} from "@/lib/types";
+import { cx, shortId } from "@/lib/utils";
 
 type CalendarHeaderProps = {
   view: "week" | "month";
@@ -32,6 +38,8 @@ type CalendarHeaderProps = {
   themeMode: ThemeMode;
   interactionMode: InteractionMode;
   showAllDayTasks: boolean;
+  notionConfigs: AppConfig[];
+  selectedNotionConfigIds: string[];
   googleConfigured: boolean;
   googleConnected: boolean;
   googleCalendars: GoogleCalendarOption[];
@@ -46,6 +54,8 @@ type CalendarHeaderProps = {
   onToggleTheme: () => void;
   onInteractionModeChange: (mode: InteractionMode) => void;
   onToggleAllDayTasks: () => void;
+  onToggleNotionConfig: (configId: string) => void;
+  onShowAllNotionConfigs: () => void;
   onToggleGoogleCalendar: () => void;
   onToggleGoogleCalendarId: (calendarId: string) => void;
   onGoogleCalendarColorChange: (calendarId: string, color: string) => void;
@@ -91,6 +101,8 @@ export function CalendarHeader({
   themeMode,
   interactionMode,
   showAllDayTasks,
+  notionConfigs,
+  selectedNotionConfigIds,
   googleConfigured,
   googleConnected,
   googleCalendars,
@@ -105,6 +117,8 @@ export function CalendarHeader({
   onToggleTheme,
   onInteractionModeChange,
   onToggleAllDayTasks,
+  onToggleNotionConfig,
+  onShowAllNotionConfigs,
   onToggleGoogleCalendar,
   onToggleGoogleCalendarId,
   onGoogleCalendarColorChange,
@@ -120,7 +134,16 @@ export function CalendarHeader({
   const nextLabel = view === "week" ? "次の日" : "次の月";
   const hiddenStatusSet = new Set(hiddenStatuses);
   const activeFilterCount = hiddenStatuses.length;
-  const activeMenuCount = activeFilterCount + (showAllDayTasks ? 0 : 1);
+  const selectedNotionConfigSet = new Set(selectedNotionConfigIds);
+  const selectedNotionConfigCount = notionConfigs.filter((item) =>
+    selectedNotionConfigSet.has(appConfigKey(item)),
+  ).length;
+  const hiddenNotionConfigCount = Math.max(
+    0,
+    notionConfigs.length - selectedNotionConfigCount,
+  );
+  const activeMenuCount =
+    activeFilterCount + hiddenNotionConfigCount + (showAllDayTasks ? 0 : 1);
   const themeLabel =
     themeMode === "dark" ? "ホワイトモード" : "ダークモード";
   const googleLabel = !googleConfigured
@@ -290,6 +313,67 @@ export function CalendarHeader({
                     <span className="min-w-0 flex-1 truncate">ログアウト</span>
                   </button>
                 </div>
+
+                {notionConfigs.length > 0 ? (
+                  <div className="border-b border-[color:var(--planner-border)] py-3">
+                    <div className="mb-3 flex items-center justify-between gap-3">
+                      <p className="flex items-center gap-2 text-sm font-bold">
+                        <Database className="h-4 w-4" />
+                        Notion DB
+                        <span className="text-xs text-[color:var(--planner-soft)]">
+                          {selectedNotionConfigCount}件
+                        </span>
+                      </p>
+                      <button
+                        type="button"
+                        onClick={onShowAllNotionConfigs}
+                        disabled={
+                          notionConfigs.length === 0 ||
+                          selectedNotionConfigCount === notionConfigs.length
+                        }
+                        className="min-h-9 rounded-lg px-3 text-xs font-bold text-mint-600 disabled:opacity-45"
+                      >
+                        すべて表示
+                      </button>
+                    </div>
+                    <div className="grid max-h-[30dvh] gap-2 overflow-auto planner-scroll">
+                      {notionConfigs.map((notionConfig) => {
+                        const configId = appConfigKey(notionConfig);
+                        const checked = selectedNotionConfigSet.has(configId);
+
+                        return (
+                          <label
+                            key={configId}
+                            className={cx(
+                              "flex min-h-12 items-center gap-3 rounded-lg border px-3 py-2 transition",
+                              checked
+                                ? "border-[color:var(--planner-border)] bg-[color:var(--planner-surface-muted)]"
+                                : "border-transparent opacity-55",
+                            )}
+                          >
+                            <input
+                              type="checkbox"
+                              checked={checked}
+                              disabled={
+                                checked && selectedNotionConfigCount === 1
+                              }
+                              onChange={() => onToggleNotionConfig(configId)}
+                              className="h-5 w-5 shrink-0 accent-mint-500 disabled:opacity-45"
+                            />
+                            <span className="flex min-w-0 flex-1 flex-col">
+                              <span className="truncate text-sm font-semibold">
+                                {notionConfig.targetName ?? "Notion database"}
+                              </span>
+                              <span className="font-mono text-xs text-[color:var(--planner-soft)]">
+                                {shortId(configId)}
+                              </span>
+                            </span>
+                          </label>
+                        );
+                      })}
+                    </div>
+                  </div>
+                ) : null}
 
                 {googleConnected ? (
                   <div className="border-b border-[color:var(--planner-border)] py-3">

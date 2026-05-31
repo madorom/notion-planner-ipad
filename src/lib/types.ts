@@ -61,6 +61,8 @@ export type PlannerTask = {
   end?: string;
   isAllDay: boolean;
   source?: "notion" | "google";
+  notionDataSourceId?: string;
+  notionDatabaseName?: string;
   googleCalendarId?: string;
   googleCalendarName?: string;
   colorHex?: string;
@@ -117,6 +119,7 @@ export type NotionDatabaseOption = {
 export type UserSettings = {
   notionConfigs: AppConfig[];
   activeNotionDataSourceId?: string | null;
+  selectedNotionDataSourceIds: string[];
   hiddenStatuses: string[];
   showAllDayTasks: boolean;
   themeMode: "light" | "dark";

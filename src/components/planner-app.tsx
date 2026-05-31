@@ -13,12 +13,14 @@ import { getViewRange, startOfPlannerWeek } from "@/lib/calendar";
 import {
   clearConfig,
   applyThemeMode,
+  appConfigKey,
   loadConfig,
   loadGoogleCalendarColors,
   loadGoogleCalendarIds,
   loadHiddenStatuses,
   loadInteractionMode,
   loadKnownConfigs,
+  loadSelectedNotionConfigIds,
   loadShowAllDayTasks,
   loadThemeMode,
   saveConfig,
@@ -27,6 +29,7 @@ import {
   saveHiddenStatuses,
   saveInteractionMode,
   saveKnownConfig,
+  saveSelectedNotionConfigIds,
   saveShowAllDayTasks,
   saveThemeMode,
   type InteractionMode,
@@ -113,7 +116,7 @@ function calendarDefaultColor(calendar: GoogleCalendarOption) {
 }
 
 function configIdentity(config: AppConfig) {
-  return config.dataSourceId ?? config.targetId;
+  return appConfigKey(config);
 }
 
 function uniqueConfigs(configs: AppConfig[]) {
@@ -133,9 +136,22 @@ function uniqueConfigs(configs: AppConfig[]) {
   return unique;
 }
 
+function annotateNotionTask(task: PlannerTask, sourceConfig: AppConfig) {
+  return {
+    ...task,
+    source: "notion" as const,
+    notionDataSourceId: configIdentity(sourceConfig),
+    notionDatabaseName: sourceConfig.targetName,
+  };
+}
+
 export function PlannerApp() {
   const [authStatus, setAuthStatus] = useState<AuthStatus>("checking");
   const [config, setConfig] = useState<AppConfig | null>(null);
+  const [knownNotionConfigs, setKnownNotionConfigs] = useState<AppConfig[]>([]);
+  const [selectedNotionConfigIds, setSelectedNotionConfigIds] = useState<
+    string[]
+  >([]);
   const [setupOpen, setSetupOpen] = useState(false);
   const [view, setView] = useState<"week" | "month">("week");
   const [currentDate, setCurrentDate] = useState(() =>
@@ -186,8 +202,31 @@ export function PlannerApp() {
 
     async function bootstrap() {
       const stored = loadConfig();
+      const localNotionConfigs = uniqueConfigs([
+        ...(stored ? [stored] : []),
+        ...loadKnownConfigs(),
+      ]);
+      const availableConfigIds = new Set(
+        localNotionConfigs.map((item) => configIdentity(item)),
+      );
+      const selectedConfigIds = loadSelectedNotionConfigIds().filter((item) =>
+        availableConfigIds.has(item),
+      );
+      const fallbackSelectedConfigIds =
+        selectedConfigIds.length > 0
+          ? selectedConfigIds
+          : stored
+            ? [configIdentity(stored)]
+            : localNotionConfigs[0]
+              ? [configIdentity(localNotionConfigs[0])]
+              : [];
       const nextThemeMode = loadThemeMode() ?? "light";
       setConfig(stored);
+      setKnownNotionConfigs(localNotionConfigs);
+      setSelectedNotionConfigIds(fallbackSelectedConfigIds);
+      if (fallbackSelectedConfigIds.length > 0) {
+        saveSelectedNotionConfigIds(fallbackSelectedConfigIds);
+      }
       setSetupOpen(!stored);
       setHiddenStatuses(loadHiddenStatuses());
       setShowAllDayTasks(loadShowAllDayTasks());
@@ -338,15 +377,52 @@ export function PlannerApp() {
     }
   }, [authStatus, googleSession.connected]);
 
+  const notionConfigs = useMemo(
+    () => uniqueConfigs([...(config ? [config] : []), ...knownNotionConfigs]),
+    [config, knownNotionConfigs],
+  );
+
+  const notionConfigLookup = useMemo(() => {
+    const lookup = new Map<string, AppConfig>();
+    for (const item of notionConfigs) {
+      lookup.set(configIdentity(item), item);
+    }
+    return lookup;
+  }, [notionConfigs]);
+
+  const selectedNotionConfigs = useMemo(() => {
+    const selected = selectedNotionConfigIds
+      .map((configId) => notionConfigLookup.get(configId))
+      .filter((item): item is AppConfig => Boolean(item));
+
+    if (selected.length > 0) {
+      return selected;
+    }
+
+    return config ? [config] : [];
+  }, [config, notionConfigLookup, selectedNotionConfigIds]);
+
   const buildCurrentUserSettings = useCallback((): UserSettings => {
     const notionConfigs = uniqueConfigs([
       ...(config ? [config] : []),
+      ...knownNotionConfigs,
       ...loadKnownConfigs(),
     ]);
+    const availableConfigIds = new Set(
+      notionConfigs.map((item) => configIdentity(item)),
+    );
+    const validSelectedConfigIds = selectedNotionConfigIds.filter((item) =>
+      availableConfigIds.has(item),
+    );
+    const fallbackSelectedConfigIds = config ? [configIdentity(config)] : [];
 
     return {
       notionConfigs,
       activeNotionDataSourceId: config ? configIdentity(config) : null,
+      selectedNotionDataSourceIds:
+        validSelectedConfigIds.length > 0
+          ? validSelectedConfigIds
+          : fallbackSelectedConfigIds,
       hiddenStatuses,
       showAllDayTasks,
       themeMode,
@@ -359,6 +435,8 @@ export function PlannerApp() {
     googleCalendarColors,
     hiddenStatuses,
     interactionMode,
+    knownNotionConfigs,
+    selectedNotionConfigIds,
     selectedGoogleCalendarIds,
     showAllDayTasks,
     themeMode,
@@ -378,6 +456,21 @@ export function PlannerApp() {
       ) ??
       notionConfigs[0] ??
       null;
+    const availableConfigIds = new Set(
+      notionConfigs.map((item) => configIdentity(item)),
+    );
+    const selectedConfigIds = settings.selectedNotionDataSourceIds.filter(
+      (item) => availableConfigIds.has(item),
+    );
+    const fallbackSelectedConfigIds = activeConfig
+      ? [configIdentity(activeConfig)]
+      : notionConfigs[0]
+        ? [configIdentity(notionConfigs[0])]
+        : [];
+    const nextSelectedConfigIds =
+      selectedConfigIds.length > 0
+        ? selectedConfigIds
+        : fallbackSelectedConfigIds;
 
     if (activeConfig) {
       saveConfig(activeConfig);
@@ -386,6 +479,7 @@ export function PlannerApp() {
     }
 
     saveHiddenStatuses(settings.hiddenStatuses);
+    saveSelectedNotionConfigIds(nextSelectedConfigIds);
     saveShowAllDayTasks(settings.showAllDayTasks);
     saveThemeMode(settings.themeMode);
     saveInteractionMode(settings.interactionMode);
@@ -393,6 +487,8 @@ export function PlannerApp() {
     saveGoogleCalendarColors(settings.googleCalendarColors);
 
     setConfig(activeConfig);
+    setKnownNotionConfigs(notionConfigs);
+    setSelectedNotionConfigIds(nextSelectedConfigIds);
     setSetupOpen(!activeConfig);
     setHiddenStatuses(settings.hiddenStatuses);
     setShowAllDayTasks(settings.showAllDayTasks);
@@ -498,46 +594,56 @@ export function PlannerApp() {
   }, [googleCalendarColors, googleCalendars]);
 
   const fetchTasks = useCallback(async () => {
-    if (!config || authStatus !== "authenticated") {
+    if (selectedNotionConfigs.length === 0 || authStatus !== "authenticated") {
       return;
     }
 
     setLoading(true);
     setError("");
 
-    const params = new URLSearchParams({
-      targetId: config.dataSourceId ?? config.targetId,
-      from: range.start.toISOString(),
-      to: range.end.toISOString(),
-      titleProperty: config.mapping.title,
-      dateProperty: config.mapping.date,
-    });
-
-    if (config.mapping.status) {
-      params.set("statusProperty", config.mapping.status);
-    }
-    if (config.mapping.memo) {
-      params.set("memoProperty", config.mapping.memo);
-    }
-    if (config.mapping.tags) {
-      params.set("tagsProperty", config.mapping.tags);
-    }
-
     try {
-      const response = await fetch(`/api/notion/tasks?${params.toString()}`);
-      const data = (await response.json()) as {
-        tasks?: PlannerTask[];
-        error?: string;
-      };
+      const notionTaskGroups = await Promise.all(
+        selectedNotionConfigs.map(async (sourceConfig) => {
+          const params = new URLSearchParams({
+            targetId: sourceConfig.dataSourceId ?? sourceConfig.targetId,
+            from: range.start.toISOString(),
+            to: range.end.toISOString(),
+            titleProperty: sourceConfig.mapping.title,
+            dateProperty: sourceConfig.mapping.date,
+          });
 
-      if (!response.ok) {
-        if (response.status === 401) {
-          setAuthStatus("guest");
-        }
-        throw new Error(data.error ?? "Notionタスクを取得できませんでした。");
-      }
+          if (sourceConfig.mapping.status) {
+            params.set("statusProperty", sourceConfig.mapping.status);
+          }
+          if (sourceConfig.mapping.memo) {
+            params.set("memoProperty", sourceConfig.mapping.memo);
+          }
+          if (sourceConfig.mapping.tags) {
+            params.set("tagsProperty", sourceConfig.mapping.tags);
+          }
 
-      setTasks(data.tasks ?? []);
+          const response = await fetch(`/api/notion/tasks?${params.toString()}`);
+          const data = (await response.json()) as {
+            tasks?: PlannerTask[];
+            error?: string;
+          };
+
+          if (!response.ok) {
+            if (response.status === 401) {
+              setAuthStatus("guest");
+            }
+            throw new Error(
+              data.error ?? "Notionタスクを取得できませんでした。",
+            );
+          }
+
+          return (data.tasks ?? []).map((task) =>
+            annotateNotionTask(task, sourceConfig),
+          );
+        }),
+      );
+      const notionTasks: PlannerTask[] = notionTaskGroups.flat();
+      let nextTasks: PlannerTask[] = notionTasks;
 
       if (googleSession.connected && googleCalendarIdsForQuery.length > 0) {
         const googleParams = new URLSearchParams({
@@ -571,8 +677,10 @@ export function PlannerApp() {
           return;
         }
 
-        setTasks([...(data.tasks ?? []), ...(googleData.tasks ?? [])]);
+        nextTasks = [...notionTasks, ...(googleData.tasks ?? [])];
       }
+
+      setTasks(nextTasks);
     } catch (fetchError) {
       setError(
         fetchError instanceof Error
@@ -584,11 +692,11 @@ export function PlannerApp() {
     }
   }, [
     authStatus,
-    config,
     googleCalendarIdsForQuery,
     googleSession.connected,
     range.end,
     range.start,
+    selectedNotionConfigs,
   ]);
 
   useEffect(() => {
@@ -715,7 +823,9 @@ export function PlannerApp() {
     googleSession.connected,
     hiddenStatuses,
     interactionMode,
+    knownNotionConfigs,
     saveRemoteUserSettings,
+    selectedNotionConfigIds,
     selectedGoogleCalendarIds,
     settingsSync.configured,
     settingsSync.loaded,
@@ -742,13 +852,18 @@ export function PlannerApp() {
       });
     }
 
-    const statusProperty = resolveStatusProperty(config);
-    for (const option of statusProperty?.options ?? []) {
-      const current = counts.get(option.name) ?? { count: 0, color: option.color };
-      counts.set(option.name, {
-        count: current.count,
-        color: current.color ?? option.color,
-      });
+    for (const sourceConfig of selectedNotionConfigs) {
+      const statusProperty = resolveStatusProperty(sourceConfig);
+      for (const option of statusProperty?.options ?? []) {
+        const current = counts.get(option.name) ?? {
+          count: 0,
+          color: option.color,
+        };
+        counts.set(option.name, {
+          count: current.count,
+          color: current.color ?? option.color,
+        });
+      }
     }
 
     return Array.from(counts, ([name, value]) => ({
@@ -761,7 +876,7 @@ export function PlannerApp() {
       }
       return a.name.localeCompare(b.name, "ja");
     });
-  }, [config, tasks]);
+  }, [selectedNotionConfigs, tasks]);
 
   const tasksWithCalendarColors = useMemo(
     () =>
@@ -893,6 +1008,45 @@ export function PlannerApp() {
     saveGoogleCalendarIds(next);
   }
 
+  function toggleNotionConfig(configId: string) {
+    const availableIds = new Set(
+      notionConfigs.map((item) => configIdentity(item)),
+    );
+    const normalized = selectedNotionConfigIds.filter((item) =>
+      availableIds.has(item),
+    );
+    const current =
+      normalized.length > 0
+        ? normalized
+        : config
+          ? [configIdentity(config)]
+          : [];
+    const next = current.includes(configId)
+      ? current.length > 1
+        ? current.filter((item) => item !== configId)
+        : current
+      : [...current, configId];
+
+    setSelectedNotionConfigIds(next);
+    saveSelectedNotionConfigIds(next);
+
+    if (config && !next.includes(configIdentity(config))) {
+      const nextActiveConfig = notionConfigs.find(
+        (item) => configIdentity(item) === next[0],
+      );
+      if (nextActiveConfig) {
+        saveConfig(nextActiveConfig);
+        setConfig(nextActiveConfig);
+      }
+    }
+  }
+
+  function showAllNotionConfigs() {
+    const next = notionConfigs.map((item) => configIdentity(item));
+    setSelectedNotionConfigIds(next);
+    saveSelectedNotionConfigIds(next);
+  }
+
   async function disconnectGoogleCalendar() {
     setError("");
 
@@ -941,7 +1095,11 @@ export function PlannerApp() {
   }
 
   async function persistTask(task: TaskInput, existingTask?: PlannerTask) {
-    if (!config) {
+    const targetConfig = existingTask?.notionDataSourceId
+      ? notionConfigLookup.get(existingTask.notionDataSourceId) ?? config
+      : config;
+
+    if (!targetConfig) {
       throw new Error("設定が読み込まれていません。");
     }
 
@@ -955,9 +1113,9 @@ export function PlannerApp() {
           "Content-Type": "application/json",
         },
         body: JSON.stringify({
-          targetId: config.dataSourceId ?? config.targetId,
-          mapping: config.mapping,
-          propertyTypes: taskPropertyTypes(config),
+          targetId: targetConfig.dataSourceId ?? targetConfig.targetId,
+          mapping: targetConfig.mapping,
+          propertyTypes: taskPropertyTypes(targetConfig),
           task,
         }),
       },
@@ -974,7 +1132,7 @@ export function PlannerApp() {
       throw new Error(data.error ?? "Notionへ保存できませんでした。");
     }
 
-    return data.task;
+    return data.task ? annotateNotionTask(data.task, targetConfig) : undefined;
   }
 
   async function setTaskTrash(task: PlannerTask, inTrash: boolean) {
@@ -1205,6 +1363,17 @@ export function PlannerApp() {
       <SetupPanel
         initialConfig={config}
         onReady={(nextConfig) => {
+          const nextConfigId = configIdentity(nextConfig);
+          setKnownNotionConfigs((current) =>
+            uniqueConfigs([nextConfig, ...current, ...loadKnownConfigs()]),
+          );
+          setSelectedNotionConfigIds((current) => {
+            const next = current.includes(nextConfigId)
+              ? current
+              : [...current, nextConfigId];
+            saveSelectedNotionConfigIds(next);
+            return next;
+          });
           setConfig(nextConfig);
           setUndoStack([]);
           setRedoStack([]);
@@ -1217,6 +1386,10 @@ export function PlannerApp() {
   const canUndo = undoStack.length > 0;
   const canRedo = redoStack.length > 0;
   const editable = interactionMode === "change";
+  const modalConfig =
+    modal?.mode === "edit" && modal.task.notionDataSourceId
+      ? notionConfigLookup.get(modal.task.notionDataSourceId) ?? config
+      : config;
 
   function openTask(task: PlannerTask) {
     if (task.source === "google") {
@@ -1238,6 +1411,8 @@ export function PlannerApp() {
         themeMode={themeMode}
         interactionMode={interactionMode}
         showAllDayTasks={showAllDayTasks}
+        notionConfigs={notionConfigs}
+        selectedNotionConfigIds={selectedNotionConfigIds}
         googleConfigured={googleSession.configured}
         googleConnected={googleSession.connected}
         googleCalendars={googleCalendars}
@@ -1252,6 +1427,8 @@ export function PlannerApp() {
         onToggleTheme={toggleThemeMode}
         onInteractionModeChange={changeInteractionMode}
         onToggleAllDayTasks={toggleAllDayTasks}
+        onToggleNotionConfig={toggleNotionConfig}
+        onShowAllNotionConfigs={showAllNotionConfigs}
         onToggleGoogleCalendar={toggleGoogleCalendar}
         onToggleGoogleCalendarId={toggleGoogleCalendarId}
         onGoogleCalendarColorChange={changeGoogleCalendarColor}
@@ -1345,7 +1522,7 @@ export function PlannerApp() {
       {modal ? (
         <TaskModal
           state={modal}
-          config={config}
+          config={modalConfig}
           saving={saving}
           readOnly={!editable && modal.mode === "edit"}
           onClose={() => setModal(null)}

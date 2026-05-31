@@ -3,6 +3,8 @@ import type { AppConfig } from "@/lib/types";
 const CONFIG_KEY = "notion-planner-ipad:v1";
 const CONFIGS_KEY = "notion-planner-ipad:configs:v1";
 const HIDDEN_STATUSES_KEY = "notion-planner-ipad:hidden-statuses:v1";
+const SELECTED_NOTION_CONFIG_IDS_KEY =
+  "notion-planner-ipad:selected-notion-configs:v1";
 const THEME_MODE_KEY = "notion-planner-ipad:theme:v1";
 const INTERACTION_MODE_KEY = "notion-planner-ipad:interaction-mode:v1";
 const SHOW_ALL_DAY_TASKS_KEY = "notion-planner-ipad:show-all-day:v1";
@@ -47,7 +49,7 @@ export function clearConfig() {
   window.localStorage.removeItem(CONFIG_KEY);
 }
 
-function configKey(config: AppConfig) {
+export function appConfigKey(config: AppConfig) {
   return config.dataSourceId ?? config.targetId;
 }
 
@@ -86,9 +88,37 @@ export function saveKnownConfig(config: AppConfig) {
   const configs = loadKnownConfigs();
   const next = [
     config,
-    ...configs.filter((item) => configKey(item) !== configKey(config)),
+    ...configs.filter((item) => appConfigKey(item) !== appConfigKey(config)),
   ].slice(0, 20);
   window.localStorage.setItem(CONFIGS_KEY, JSON.stringify(next));
+}
+
+export function loadSelectedNotionConfigIds() {
+  if (typeof window === "undefined") {
+    return [];
+  }
+
+  const raw = window.localStorage.getItem(SELECTED_NOTION_CONFIG_IDS_KEY);
+  if (!raw) {
+    return [];
+  }
+
+  try {
+    const parsed = JSON.parse(raw);
+    return Array.isArray(parsed)
+      ? parsed.filter((value): value is string => typeof value === "string")
+      : [];
+  } catch {
+    window.localStorage.removeItem(SELECTED_NOTION_CONFIG_IDS_KEY);
+    return [];
+  }
+}
+
+export function saveSelectedNotionConfigIds(configIds: string[]) {
+  window.localStorage.setItem(
+    SELECTED_NOTION_CONFIG_IDS_KEY,
+    JSON.stringify(Array.from(new Set(configIds))),
+  );
 }
 
 export function loadHiddenStatuses() {
