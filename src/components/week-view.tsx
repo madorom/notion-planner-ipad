@@ -10,13 +10,10 @@ import {
   parseISO,
   setHours,
   setMinutes,
+  startOfDay,
 } from "date-fns";
 import { ja } from "date-fns/locale";
-import type {
-  PointerEvent as ReactPointerEvent,
-  UIEvent,
-  WheelEvent,
-} from "react";
+import type { PointerEvent as ReactPointerEvent, UIEvent } from "react";
 import {
   useCallback,
   useEffect,
@@ -30,13 +27,11 @@ import {
   DAY_START_HOUR,
   HOUR_HEIGHT,
   allDayTasksForDay,
-  getWeekDays,
   hourLabel,
   tasksForDay,
 } from "@/lib/calendar";
 import type { PlannerTask } from "@/lib/types";
 import { TaskCard } from "@/components/task-card";
-import { useHorizontalDateSwipe } from "@/lib/use-horizontal-date-swipe";
 import { clamp } from "@/lib/utils";
 
 type WeekViewProps = {
@@ -53,17 +48,16 @@ const hours = Array.from(
   { length: DAY_END_HOUR - DAY_START_HOUR },
   (_, index) => DAY_START_HOUR + index,
 );
-const WHEEL_SLIDE_THRESHOLD = 54;
-const WHEEL_MAX_OFFSET = 118;
-const WHEEL_SLIDE_COOLDOWN_MS = 80;
-const WHEEL_SETTLE_DELAY_MS = 120;
 const TIME_AXIS_WIDTH = 72;
+const DAY_COLUMN_WIDTH = 132;
 const DRAG_START_DISTANCE = 8;
 const DRAG_SNAP_MINUTES = 15;
 const CREATE_HOLD_DELAY_MS = 260;
 const CREATE_HOLD_MOVE_TOLERANCE = 10;
-const WEEK_SWIPE_DAY_STEP = 1;
-const WEEK_PAGE_DAY_OFFSETS = [-WEEK_SWIPE_DAY_STEP, 0, WEEK_SWIPE_DAY_STEP] as const;
+const CONTINUOUS_PAST_DAYS = 21;
+const CONTINUOUS_FUTURE_DAYS = 42;
+const CONTINUOUS_SHIFT_DAYS = 7;
+const CONTINUOUS_EDGE_DAYS = 8;
 
 type LayoutTask = {
   task: PlannerTask;
@@ -146,7 +140,9 @@ function assignLanes(group: LayoutTask[]) {
   const laneEnds: number[] = [];
 
   for (const item of group) {
-    const availableLane = laneEnds.findIndex((endMinute) => endMinute <= item.startMinute);
+    const availableLane = laneEnds.findIndex(
+      (endMinute) => endMinute <= item.startMinute,
+    );
     const lane = availableLane === -1 ? laneEnds.length : availableLane;
     item.lane = lane;
     laneEnds[lane] = item.endMinute;
@@ -195,6 +191,13 @@ function layoutTimedTasks(tasks: PlannerTask[]) {
   return intervals;
 }
 
+function columnWidthFor(node: HTMLDivElement, dayCount: number) {
+  return Math.max(
+    DAY_COLUMN_WIDTH,
+    (node.scrollWidth - TIME_AXIS_WIDTH) / dayCount,
+  );
+}
+
 export function WeekView({
   currentDate,
   tasks,
@@ -204,42 +207,31 @@ export function WeekView({
   onDateChange,
   onMoveTask,
 }: WeekViewProps) {
-  const days = useMemo(() => getWeekDays(currentDate), [currentDate]);
-  const weekPages = useMemo(
+  const anchorDate = startOfDay(currentDate);
+  const days = useMemo(
     () =>
-      WEEK_PAGE_DAY_OFFSETS.map((dayOffset) => ({
-        dayOffset,
-        days: getWeekDays(addDays(currentDate, dayOffset)),
-      })),
-    [currentDate],
+      Array.from(
+        { length: CONTINUOUS_PAST_DAYS + CONTINUOUS_FUTURE_DAYS + 1 },
+        (_, index) => addDays(anchorDate, index - CONTINUOUS_PAST_DAYS),
+      ),
+    [anchorDate],
   );
   const bodyHeight = hours.length * HOUR_HEIGHT;
+  const tableMinWidth = TIME_AXIS_WIDTH + days.length * DAY_COLUMN_WIDTH;
+  const gridTemplateColumns = `${TIME_AXIS_WIDTH}px repeat(${days.length}, minmax(${DAY_COLUMN_WIDTH}px, 1fr))`;
+  const horizontalScrollRef = useRef<HTMLDivElement | null>(null);
   const gridRef = useRef<HTMLDivElement | null>(null);
-  const horizontalScrollRefs = useRef<Array<HTMLDivElement | null>>([]);
-  const horizontalScrollLeftRef = useRef(0);
-  const timeScrollRefs = useRef<Array<HTMLDivElement | null>>([]);
+  const timeScrollRef = useRef<HTMLDivElement | null>(null);
   const timeScrollTopRef = useRef(0);
-  const wheelDeltaRef = useRef(0);
-  const wheelOffsetRef = useRef(0);
-  const lastWheelSlideAtRef = useRef(0);
-  const previousDateRef = useRef(currentDate);
-  const wheelSettleTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+  const initializedScrollRef = useRef(false);
+  const pendingScrollAdjustmentRef = useRef(0);
+  const isRepositioningRef = useRef(false);
+  const lastWindowShiftAtRef = useRef(0);
   const dragSessionRef = useRef<DragSession | null>(null);
   const dragPreviewRef = useRef<DragPreview | null>(null);
   const createHoldSessionRef = useRef<CreateHoldSession | null>(null);
   const suppressClickUntilRef = useRef(0);
-  const [slideDirection, setSlideDirection] = useState<"next" | "previous">("next");
-  const [wheelOffset, setWheelOffset] = useState(0);
   const [dragPreview, setDragPreview] = useState<DragPreview | null>(null);
-  const {
-    offset: swipeOffset,
-    isClickSuppressed: isSwipeClickSuppressed,
-    swipeHandlers,
-  } = useHorizontalDateSwipe({
-    disabled: Boolean(dragSessionRef.current?.active),
-    onSwipe: (direction) =>
-      onDateChange(addDays(currentDate, direction * WEEK_SWIPE_DAY_STEP)),
-  });
 
   const dragPointToPreview = useCallback(
     (
@@ -255,9 +247,9 @@ export function WeekView({
       }
 
       const rect = grid.getBoundingClientRect();
-      const dayWidth = (rect.width - TIME_AXIS_WIDTH) / 7;
+      const dayWidth = (rect.width - TIME_AXIS_WIDTH) / days.length;
       const relativeX = clientX - rect.left - TIME_AXIS_WIDTH;
-      const dayIndex = clamp(Math.floor(relativeX / dayWidth), 0, 6);
+      const dayIndex = clamp(Math.floor(relativeX / dayWidth), 0, days.length - 1);
       const relativeY = clamp(clientY - rect.top, 0, bodyHeight);
       const pointerMinute =
         DAY_START_HOUR * 60 + (relativeY / HOUR_HEIGHT) * 60;
@@ -308,67 +300,28 @@ export function WeekView({
     setCurrentDragPreview(null);
   }, [cancelCreateHold, editable]);
 
-  function syncTimeScrollTop(scrollTop: number, source?: HTMLDivElement) {
-    timeScrollTopRef.current = scrollTop;
-
-    for (const timeScroll of timeScrollRefs.current) {
-      if (!timeScroll || timeScroll === source) {
-        continue;
-      }
-
-      if (Math.abs(timeScroll.scrollTop - scrollTop) > 1) {
-        timeScroll.scrollTop = scrollTop;
-      }
-    }
-  }
-
-  function syncHorizontalScrollLeft(scrollLeft: number, source?: HTMLDivElement) {
-    horizontalScrollLeftRef.current = scrollLeft;
-
-    for (const horizontalScroll of horizontalScrollRefs.current) {
-      if (!horizontalScroll || horizontalScroll === source) {
-        continue;
-      }
-
-      if (Math.abs(horizontalScroll.scrollLeft - scrollLeft) > 1) {
-        horizontalScroll.scrollLeft = scrollLeft;
-      }
-    }
-  }
-
-  function setTimeScrollNode(index: number, node: HTMLDivElement | null) {
-    timeScrollRefs.current[index] = node;
-
-    if (node) {
-      node.scrollTop = timeScrollTopRef.current;
-    }
-  }
-
-  function setHorizontalScrollNode(index: number, node: HTMLDivElement | null) {
-    horizontalScrollRefs.current[index] = node;
-
-    if (node) {
-      node.scrollLeft = horizontalScrollLeftRef.current;
-    }
-  }
-
   useLayoutEffect(() => {
-    syncTimeScrollTop(timeScrollTopRef.current);
-    syncHorizontalScrollLeft(horizontalScrollLeftRef.current);
-  }, [currentDate]);
-
-  useEffect(() => {
-    if (!isSameDay(previousDateRef.current, currentDate)) {
-      setSlideDirection(
-        currentDate.getTime() > previousDateRef.current.getTime()
-          ? "next"
-          : "previous",
-      );
-      previousDateRef.current = currentDate;
-      wheelDeltaRef.current = 0;
-      wheelOffsetRef.current = 0;
-      setWheelOffset(0);
+    const horizontalScroll = horizontalScrollRef.current;
+    if (!horizontalScroll) {
+      return;
     }
+
+    if (!initializedScrollRef.current) {
+      horizontalScroll.scrollLeft = CONTINUOUS_PAST_DAYS * DAY_COLUMN_WIDTH;
+      initializedScrollRef.current = true;
+    } else if (pendingScrollAdjustmentRef.current !== 0) {
+      horizontalScroll.scrollLeft += pendingScrollAdjustmentRef.current;
+      pendingScrollAdjustmentRef.current = 0;
+    }
+
+    const timeScroll = timeScrollRef.current;
+    if (timeScroll && Math.abs(timeScroll.scrollTop - timeScrollTopRef.current) > 1) {
+      timeScroll.scrollTop = timeScrollTopRef.current;
+    }
+
+    window.requestAnimationFrame(() => {
+      isRepositioningRef.current = false;
+    });
   }, [currentDate]);
 
   useEffect(() => {
@@ -453,9 +406,6 @@ export function WeekView({
     window.addEventListener("pointercancel", finishPointerDrag, true);
 
     return () => {
-      if (wheelSettleTimerRef.current) {
-        clearTimeout(wheelSettleTimerRef.current);
-      }
       cancelCreateHold();
       window.removeEventListener("pointermove", handlePointerMove, true);
       window.removeEventListener("pointermove", handleCreateHoldMove, true);
@@ -464,12 +414,45 @@ export function WeekView({
     };
   }, [cancelCreateHold, dragPointToPreview, editable, onMoveTask]);
 
+  function shiftDateWindow(direction: -1 | 1, columnWidth: number) {
+    const now = Date.now();
+    if (now - lastWindowShiftAtRef.current < 120 || isRepositioningRef.current) {
+      return;
+    }
+
+    lastWindowShiftAtRef.current = now;
+    isRepositioningRef.current = true;
+    pendingScrollAdjustmentRef.current +=
+      -direction * CONTINUOUS_SHIFT_DAYS * columnWidth;
+    onDateChange(addDays(currentDate, direction * CONTINUOUS_SHIFT_DAYS));
+  }
+
+  function handleHorizontalScroll(event: UIEvent<HTMLDivElement>) {
+    if (isRepositioningRef.current) {
+      return;
+    }
+
+    const node = event.currentTarget;
+    const columnWidth = columnWidthFor(node, days.length);
+    const edgeDistance = columnWidth * CONTINUOUS_EDGE_DAYS;
+    const maxScrollLeft = node.scrollWidth - node.clientWidth;
+
+    if (node.scrollLeft < edgeDistance) {
+      shiftDateWindow(-1, columnWidth);
+      return;
+    }
+
+    if (maxScrollLeft - node.scrollLeft < edgeDistance) {
+      shiftDateWindow(1, columnWidth);
+    }
+  }
+
   function beginCreateHold(day: Date, event: ReactPointerEvent<HTMLDivElement>) {
     if (
       !editable ||
       !event.isPrimary ||
       event.button !== 0 ||
-      isSwipeClickSuppressed() ||
+      Date.now() < suppressClickUntilRef.current ||
       (event.target instanceof Element && event.target.closest("[data-task-card]"))
     ) {
       return;
@@ -496,87 +479,7 @@ export function WeekView({
   }
 
   function handleTimeScroll(event: UIEvent<HTMLDivElement>) {
-    syncTimeScrollTop(event.currentTarget.scrollTop, event.currentTarget);
-  }
-
-  function handleHorizontalScroll(event: UIEvent<HTMLDivElement>) {
-    syncHorizontalScrollLeft(
-      event.currentTarget.scrollLeft,
-      event.currentTarget,
-    );
-  }
-
-  function handleWheel(event: WheelEvent<HTMLDivElement>) {
-    if (dragSessionRef.current?.active) {
-      return;
-    }
-
-    const horizontalDelta =
-      Math.abs(event.deltaX) >= Math.abs(event.deltaY)
-        ? event.deltaX
-        : event.shiftKey
-          ? event.deltaY
-          : 0;
-
-    if (Math.abs(horizontalDelta) < 8) {
-      return;
-    }
-
-    const maxScrollLeft = Math.max(
-      0,
-      event.currentTarget.scrollWidth - event.currentTarget.clientWidth,
-    );
-    const canScrollInsideCalendar =
-      (horizontalDelta > 0 &&
-        event.currentTarget.scrollLeft < maxScrollLeft - 2) ||
-      (horizontalDelta < 0 && event.currentTarget.scrollLeft > 2);
-
-    if (canScrollInsideCalendar) {
-      wheelDeltaRef.current = 0;
-      wheelOffsetRef.current = 0;
-      setWheelOffset(0);
-      return;
-    }
-
-    event.preventDefault();
-    syncHorizontalScrollLeft(horizontalDelta > 0 ? maxScrollLeft : 0);
-    wheelDeltaRef.current += horizontalDelta;
-    wheelOffsetRef.current = clamp(
-      wheelOffsetRef.current - horizontalDelta,
-      -WHEEL_MAX_OFFSET,
-      WHEEL_MAX_OFFSET,
-    );
-    setWheelOffset(wheelOffsetRef.current);
-
-    if (wheelSettleTimerRef.current) {
-      clearTimeout(wheelSettleTimerRef.current);
-    }
-
-    const now = Date.now();
-    if (now - lastWheelSlideAtRef.current < WHEEL_SLIDE_COOLDOWN_MS) {
-      wheelSettleTimerRef.current = setTimeout(() => {
-        wheelDeltaRef.current = 0;
-        wheelOffsetRef.current = 0;
-        setWheelOffset(0);
-      }, WHEEL_SETTLE_DELAY_MS);
-      return;
-    }
-
-    if (Math.abs(wheelDeltaRef.current) < WHEEL_SLIDE_THRESHOLD) {
-      wheelSettleTimerRef.current = setTimeout(() => {
-        wheelDeltaRef.current = 0;
-        wheelOffsetRef.current = 0;
-        setWheelOffset(0);
-      }, WHEEL_SETTLE_DELAY_MS);
-      return;
-    }
-
-    const direction = wheelDeltaRef.current > 0 ? 1 : -1;
-    wheelDeltaRef.current = 0;
-    wheelOffsetRef.current = direction > 0 ? -WHEEL_MAX_OFFSET : WHEEL_MAX_OFFSET;
-    setWheelOffset(wheelOffsetRef.current);
-    lastWheelSlideAtRef.current = now;
-    onDateChange(addDays(currentDate, direction * WEEK_SWIPE_DAY_STEP));
+    timeScrollTopRef.current = event.currentTarget.scrollTop;
   }
 
   function pointerMinuteFromY(clientY: number) {
@@ -629,28 +532,21 @@ export function WeekView({
     onEdit(task);
   }
 
-  function renderWeekPage(
-    page: { dayOffset: number; days: Date[] },
-    pageIndex: number,
-  ) {
-    const isCurrentPage = page.dayOffset === 0;
-
-    return (
-      <div
-        key={page.dayOffset}
-        aria-hidden={!isCurrentPage}
-        className={`w-full shrink-0 ${isCurrentPage ? "" : "pointer-events-none opacity-80"}`}
-      >
+  return (
+    <section className="mx-auto max-w-[1500px] px-4 py-4 md:px-6">
+      <div className="overflow-hidden rounded-xl border border-[color:var(--planner-border)] bg-[color:var(--planner-surface)] shadow-planner">
         <div
-          ref={(node) => setHorizontalScrollNode(pageIndex, node)}
+          ref={horizontalScrollRef}
           className="planner-scroll week-horizontal-scroll overflow-x-auto"
           onScroll={handleHorizontalScroll}
-          onWheel={isCurrentPage ? handleWheel : undefined}
         >
-          <div className="week-table min-w-[968px]">
-            <div className="grid grid-cols-[72px_repeat(7,minmax(128px,1fr))] border-b border-[color:var(--planner-border)] bg-[color:var(--planner-surface)]">
+          <div className="week-table" style={{ minWidth: tableMinWidth }}>
+            <div
+              className="grid border-b border-[color:var(--planner-border)] bg-[color:var(--planner-surface)]"
+              style={{ gridTemplateColumns }}
+            >
               <div className="border-r border-[color:var(--planner-border)]" />
-              {page.days.map((day) => (
+              {days.map((day) => (
                 <div
                   key={day.toISOString()}
                   className={`min-h-20 border-r border-[color:var(--planner-border)] px-3 py-3 last:border-r-0 ${
@@ -667,11 +563,14 @@ export function WeekView({
               ))}
             </div>
 
-            <div className="grid grid-cols-[72px_repeat(7,minmax(128px,1fr))] border-b border-[color:var(--planner-border)] bg-[color:var(--planner-surface-muted)]">
+            <div
+              className="grid border-b border-[color:var(--planner-border)] bg-[color:var(--planner-surface-muted)]"
+              style={{ gridTemplateColumns }}
+            >
               <div className="border-r border-[color:var(--planner-border)] px-2 py-3 text-right text-xs font-bold text-[color:var(--planner-soft)]">
                 終日
               </div>
-              {page.days.map((day) => {
+              {days.map((day) => {
                 const allDayTasks = allDayTasksForDay(tasks, day);
                 const visibleAllDayTasks = allDayTasks.slice(0, 3);
                 const hiddenAllDayCount =
@@ -706,14 +605,14 @@ export function WeekView({
             </div>
 
             <div
-              ref={(node) => setTimeScrollNode(pageIndex, node)}
+              ref={timeScrollRef}
               className="planner-scroll week-time-scroll overflow-y-auto overflow-x-hidden"
               onScroll={handleTimeScroll}
             >
               <div
-                ref={isCurrentPage ? gridRef : undefined}
-                className="grid grid-cols-[72px_repeat(7,minmax(128px,1fr))]"
-                style={{ minHeight: bodyHeight }}
+                ref={gridRef}
+                className="grid"
+                style={{ minHeight: bodyHeight, gridTemplateColumns }}
               >
                 <div className="relative border-r border-[color:var(--planner-border)] bg-[color:var(--planner-surface-muted)]">
                   {hours.map((hour) => (
@@ -727,7 +626,7 @@ export function WeekView({
                   ))}
                 </div>
 
-                {page.days.map((day, dayIndex) => {
+                {days.map((day, dayIndex) => {
                   const dayTasks = tasksForDay(tasks, day);
                   const timedTasks = dayTasks.filter((task) => !task.isAllDay);
                   const laidOutTasks = layoutTimedTasks(timedTasks);
@@ -738,12 +637,10 @@ export function WeekView({
                       className="planner-grid-paper relative border-r border-[color:var(--planner-border)] last:border-r-0"
                       style={{ height: bodyHeight }}
                       onPointerDown={
-                        isCurrentPage && editable
-                          ? (event) => beginCreateHold(day, event)
-                          : undefined
+                        editable ? (event) => beginCreateHold(day, event) : undefined
                       }
                     >
-                      {isCurrentPage && dragPreview?.dayIndex === dayIndex ? (
+                      {dragPreview?.dayIndex === dayIndex ? (
                         <div
                           className="pointer-events-none absolute left-1.5 right-1.5 z-30 rounded-lg border-2 border-dashed border-mint-500 bg-mint-500/15 px-2 py-1 text-xs font-bold text-mint-600 shadow-planner-soft dark:text-mint-500"
                           style={{
@@ -761,7 +658,6 @@ export function WeekView({
                         const isDense =
                           layout.laneCount > 1 || layout.height < 76;
                         const isDragging =
-                          isCurrentPage &&
                           dragPreview?.task.id === layout.task.id;
 
                         return (
@@ -781,9 +677,7 @@ export function WeekView({
                             }}
                             onClick={handleTaskClick}
                             onPointerDown={
-                              isCurrentPage &&
-                              editable &&
-                              layout.task.source !== "google"
+                              editable && layout.task.source !== "google"
                                 ? beginTaskDrag
                                 : undefined
                             }
@@ -795,28 +689,6 @@ export function WeekView({
                 })}
               </div>
             </div>
-          </div>
-        </div>
-      </div>
-    );
-  }
-
-  return (
-    <section className="mx-auto max-w-[1500px] px-4 py-4 md:px-6">
-      <div className="overflow-hidden rounded-xl border border-[color:var(--planner-border)] bg-[color:var(--planner-surface)] shadow-planner">
-        <div
-          key={format(currentDate, "yyyy-MM-dd")}
-          className="week-slide-layer"
-          data-direction={slideDirection}
-        >
-          <div
-            className="week-gesture-layer flex"
-            style={{
-              transform: `translate3d(calc(-100% + ${wheelOffset + swipeOffset}px), 0, 0)`,
-            }}
-            {...swipeHandlers}
-          >
-            {weekPages.map(renderWeekPage)}
           </div>
         </div>
       </div>
