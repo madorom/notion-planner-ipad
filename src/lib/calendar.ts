@@ -22,6 +22,14 @@ export const DAY_START_HOUR = 6;
 export const DAY_END_HOUR = 23;
 export const HOUR_HEIGHT = 72;
 
+export function startOfPlannerWeek(anchor: Date) {
+  return startOfDay(
+    startOfWeek(anchor, {
+      weekStartsOn: WEEK_STARTS_ON,
+    }),
+  );
+}
+
 export function getWeekDays(anchor: Date) {
   const start = startOfDay(anchor);
   return Array.from({ length: 7 }, (_, index) => addDays(start, index));

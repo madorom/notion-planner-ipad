@@ -9,7 +9,7 @@ import { MonthView } from "@/components/month-view";
 import { SetupPanel } from "@/components/setup-panel";
 import { TaskModal, taskPropertyTypes } from "@/components/task-modal";
 import { WeekView } from "@/components/week-view";
-import { getViewRange } from "@/lib/calendar";
+import { getViewRange, startOfPlannerWeek } from "@/lib/calendar";
 import {
   clearConfig,
   applyThemeMode,
@@ -17,11 +17,14 @@ import {
   loadGoogleCalendarColors,
   loadGoogleCalendarIds,
   loadHiddenStatuses,
+  loadInteractionMode,
   loadThemeMode,
   saveGoogleCalendarColors,
   saveGoogleCalendarIds,
   saveHiddenStatuses,
+  saveInteractionMode,
   saveThemeMode,
+  type InteractionMode,
   type ThemeMode,
 } from "@/lib/storage";
 import type {
@@ -99,7 +102,9 @@ export function PlannerApp() {
   const [config, setConfig] = useState<AppConfig | null>(null);
   const [setupOpen, setSetupOpen] = useState(false);
   const [view, setView] = useState<"week" | "month">("week");
-  const [currentDate, setCurrentDate] = useState(() => new Date());
+  const [currentDate, setCurrentDate] = useState(() =>
+    startOfPlannerWeek(new Date()),
+  );
   const [tasks, setTasks] = useState<PlannerTask[]>([]);
   const [loading, setLoading] = useState(false);
   const [saving, setSaving] = useState(false);
@@ -110,6 +115,8 @@ export function PlannerApp() {
   const [redoStack, setRedoStack] = useState<TaskHistoryAction[]>([]);
   const [historyBusy, setHistoryBusy] = useState(false);
   const [themeMode, setThemeMode] = useState<ThemeMode>("light");
+  const [interactionMode, setInteractionMode] =
+    useState<InteractionMode>("view");
   const [googleSession, setGoogleSession] = useState<GoogleSessionState>({
     configured: false,
     connected: false,
@@ -135,6 +142,7 @@ export function PlannerApp() {
       setSetupOpen(!stored);
       setHiddenStatuses(loadHiddenStatuses());
       setThemeMode(nextThemeMode);
+      setInteractionMode(loadInteractionMode());
       setSelectedGoogleCalendarIds(loadGoogleCalendarIds());
       setGoogleCalendarColors(loadGoogleCalendarColors());
       applyThemeMode(nextThemeMode);
@@ -503,6 +511,23 @@ export function PlannerApp() {
     });
   }
 
+  function changeInteractionMode(nextMode: InteractionMode) {
+    setInteractionMode(nextMode);
+    saveInteractionMode(nextMode);
+
+    if (nextMode === "view") {
+      setModal(null);
+    }
+  }
+
+  function changeView(nextView: "week" | "month") {
+    setView(nextView);
+
+    if (nextView === "week") {
+      setCurrentDate((date) => startOfPlannerWeek(date));
+    }
+  }
+
   function toggleGoogleCalendar() {
     if (!googleSession.configured) {
       setError(
@@ -658,7 +683,7 @@ export function PlannerApp() {
   }
 
   async function saveTask(task: TaskInput, existingTask?: PlannerTask) {
-    if (!config) {
+    if (!config || interactionMode !== "change") {
       return;
     }
 
@@ -695,7 +720,7 @@ export function PlannerApp() {
   }
 
   async function moveTask(task: PlannerTask, start: Date, end: Date) {
-    if (task.source === "google") {
+    if (interactionMode !== "change" || task.source === "google") {
       return;
     }
 
@@ -867,8 +892,13 @@ export function PlannerApp() {
 
   const canUndo = undoStack.length > 0;
   const canRedo = redoStack.length > 0;
+  const editable = interactionMode === "change";
 
   function openTask(task: PlannerTask) {
+    if (!editable && task.source !== "google") {
+      return;
+    }
+
     if (task.source === "google") {
       if (task.url) {
         window.open(task.url, "_blank", "noopener,noreferrer");
@@ -886,6 +916,7 @@ export function PlannerApp() {
         currentDate={currentDate}
         loading={loading}
         themeMode={themeMode}
+        interactionMode={interactionMode}
         googleConfigured={googleSession.configured}
         googleConnected={googleSession.connected}
         googleCalendars={googleCalendars}
@@ -894,10 +925,11 @@ export function PlannerApp() {
         googleCalendarColors={googleCalendarColors}
         statusOptions={statusOptions}
         hiddenStatuses={hiddenStatuses}
-        onViewChange={setView}
+        onViewChange={changeView}
         onDateChange={setCurrentDate}
         onRefresh={fetchTasks}
         onToggleTheme={toggleThemeMode}
+        onInteractionModeChange={changeInteractionMode}
         onToggleGoogleCalendar={toggleGoogleCalendar}
         onToggleGoogleCalendarId={toggleGoogleCalendarId}
         onGoogleCalendarColorChange={changeGoogleCalendarColor}
@@ -921,6 +953,7 @@ export function PlannerApp() {
         <WeekView
           currentDate={currentDate}
           tasks={visibleTasks}
+          editable={editable}
           onCreate={(start, end) => setModal({ mode: "create", start, end })}
           onEdit={openTask}
           onDateChange={setCurrentDate}
@@ -930,6 +963,7 @@ export function PlannerApp() {
         <MonthView
           currentDate={currentDate}
           tasks={visibleTasks}
+          editable={editable}
           onDateChange={setCurrentDate}
           onCreate={(start, end) => {
             setCurrentDate(start);
@@ -961,7 +995,7 @@ export function PlannerApp() {
           aria-label="元に戻す"
           title="元に戻す"
           onClick={undoLastAction}
-          disabled={!canUndo || historyBusy || saving}
+          disabled={!editable || !canUndo || historyBusy || saving}
           className="inline-flex min-h-11 items-center justify-center gap-2 rounded-lg px-3 text-sm font-bold transition active:scale-[0.98] disabled:cursor-not-allowed disabled:opacity-40"
         >
           {historyBusy ? (
@@ -976,7 +1010,7 @@ export function PlannerApp() {
           aria-label="次に進む"
           title="次に進む"
           onClick={redoLastAction}
-          disabled={!canRedo || historyBusy || saving}
+          disabled={!editable || !canRedo || historyBusy || saving}
           className="inline-flex min-h-11 items-center justify-center gap-2 rounded-lg px-3 text-sm font-bold transition active:scale-[0.98] disabled:cursor-not-allowed disabled:opacity-40"
         >
           <Redo2 className="h-5 w-5" />

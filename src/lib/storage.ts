@@ -3,12 +3,14 @@ import type { AppConfig } from "@/lib/types";
 const CONFIG_KEY = "notion-planner-ipad:v1";
 const HIDDEN_STATUSES_KEY = "notion-planner-ipad:hidden-statuses:v1";
 const THEME_MODE_KEY = "notion-planner-ipad:theme:v1";
+const INTERACTION_MODE_KEY = "notion-planner-ipad:interaction-mode:v1";
 const GOOGLE_CALENDAR_ID_KEY = "notion-planner-ipad:google-calendar-id:v1";
 const GOOGLE_CALENDAR_IDS_KEY = "notion-planner-ipad:google-calendar-ids:v1";
 const GOOGLE_CALENDAR_COLORS_KEY =
   "notion-planner-ipad:google-calendar-colors:v1";
 
 export type ThemeMode = "light" | "dark";
+export type InteractionMode = "view" | "change";
 
 export function loadConfig(): AppConfig | null {
   if (typeof window === "undefined") {
@@ -91,6 +93,23 @@ export function applyThemeMode(themeMode: ThemeMode) {
 export function saveThemeMode(themeMode: ThemeMode) {
   window.localStorage.setItem(THEME_MODE_KEY, themeMode);
   applyThemeMode(themeMode);
+}
+
+function isInteractionMode(value: string | null): value is InteractionMode {
+  return value === "view" || value === "change";
+}
+
+export function loadInteractionMode(): InteractionMode {
+  if (typeof window === "undefined") {
+    return "view";
+  }
+
+  const stored = window.localStorage.getItem(INTERACTION_MODE_KEY);
+  return isInteractionMode(stored) ? stored : "view";
+}
+
+export function saveInteractionMode(interactionMode: InteractionMode) {
+  window.localStorage.setItem(INTERACTION_MODE_KEY, interactionMode);
 }
 
 export function loadGoogleCalendarId() {

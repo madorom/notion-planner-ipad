@@ -42,6 +42,7 @@ import { clamp } from "@/lib/utils";
 type WeekViewProps = {
   currentDate: Date;
   tasks: PlannerTask[];
+  editable: boolean;
   onCreate: (start: Date, end: Date) => void;
   onEdit: (task: PlannerTask) => void;
   onDateChange: (date: Date) => void;
@@ -52,16 +53,16 @@ const hours = Array.from(
   { length: DAY_END_HOUR - DAY_START_HOUR },
   (_, index) => DAY_START_HOUR + index,
 );
-const WHEEL_SLIDE_THRESHOLD = 80;
+const WHEEL_SLIDE_THRESHOLD = 54;
 const WHEEL_MAX_OFFSET = 118;
-const WHEEL_SLIDE_COOLDOWN_MS = 360;
-const WHEEL_SETTLE_DELAY_MS = 180;
+const WHEEL_SLIDE_COOLDOWN_MS = 80;
+const WHEEL_SETTLE_DELAY_MS = 120;
 const TIME_AXIS_WIDTH = 72;
 const DRAG_START_DISTANCE = 8;
 const DRAG_SNAP_MINUTES = 15;
 const CREATE_HOLD_DELAY_MS = 260;
 const CREATE_HOLD_MOVE_TOLERANCE = 10;
-const WEEK_SWIPE_DAY_STEP = 7;
+const WEEK_SWIPE_DAY_STEP = 1;
 const WEEK_PAGE_DAY_OFFSETS = [-WEEK_SWIPE_DAY_STEP, 0, WEEK_SWIPE_DAY_STEP] as const;
 
 type LayoutTask = {
@@ -197,6 +198,7 @@ function layoutTimedTasks(tasks: PlannerTask[]) {
 export function WeekView({
   currentDate,
   tasks,
+  editable,
   onCreate,
   onEdit,
   onDateChange,
@@ -294,6 +296,16 @@ export function WeekView({
     }
   }, []);
 
+  useEffect(() => {
+    if (editable) {
+      return;
+    }
+
+    cancelCreateHold();
+    dragSessionRef.current = null;
+    setCurrentDragPreview(null);
+  }, [cancelCreateHold, editable]);
+
   function syncTimeScrollTop(scrollTop: number, source?: HTMLDivElement) {
     timeScrollTopRef.current = scrollTop;
 
@@ -336,6 +348,10 @@ export function WeekView({
 
   useEffect(() => {
     function handlePointerMove(event: PointerEvent) {
+      if (!editable) {
+        return;
+      }
+
       const session = dragSessionRef.current;
       if (!session || event.pointerId !== session.pointerId) {
         return;
@@ -363,6 +379,10 @@ export function WeekView({
     }
 
     function handleCreateHoldMove(event: PointerEvent) {
+      if (!editable) {
+        return;
+      }
+
       const session = createHoldSessionRef.current;
       if (!session || event.pointerId !== session.pointerId) {
         return;
@@ -417,10 +437,11 @@ export function WeekView({
       window.removeEventListener("pointerup", finishPointerDrag, true);
       window.removeEventListener("pointercancel", finishPointerDrag, true);
     };
-  }, [cancelCreateHold, dragPointToPreview, onMoveTask]);
+  }, [cancelCreateHold, dragPointToPreview, editable, onMoveTask]);
 
   function beginCreateHold(day: Date, event: ReactPointerEvent<HTMLDivElement>) {
     if (
+      !editable ||
       !event.isPrimary ||
       event.button !== 0 ||
       isSwipeClickSuppressed() ||
@@ -524,7 +545,7 @@ export function WeekView({
     task: PlannerTask,
     event: ReactPointerEvent<HTMLButtonElement>,
   ) {
-    if (task.source === "google" || task.isAllDay || event.button !== 0) {
+    if (!editable || task.source === "google" || task.isAllDay || event.button !== 0) {
       return;
     }
 
@@ -549,7 +570,10 @@ export function WeekView({
   }
 
   function handleTaskClick(task: PlannerTask) {
-    if (Date.now() < suppressClickUntilRef.current) {
+    if (
+      (!editable && task.source !== "google") ||
+      Date.now() < suppressClickUntilRef.current
+    ) {
       return;
     }
 
@@ -568,7 +592,10 @@ export function WeekView({
         aria-hidden={!isCurrentPage}
         className={`w-full shrink-0 ${isCurrentPage ? "" : "pointer-events-none opacity-80"}`}
       >
-        <div className="planner-scroll week-horizontal-scroll overflow-x-auto">
+        <div
+          className="planner-scroll week-horizontal-scroll overflow-x-auto"
+          onWheel={isCurrentPage ? handleWheel : undefined}
+        >
           <div className="week-table min-w-[968px]">
             <div className="grid grid-cols-[72px_repeat(7,minmax(128px,1fr))] border-b border-[color:var(--planner-border)] bg-[color:var(--planner-surface)]">
               <div className="border-r border-[color:var(--planner-border)]" />
@@ -612,6 +639,7 @@ export function WeekView({
                           key={task.id}
                           task={task}
                           compact
+                          readOnly={!editable && task.source !== "google"}
                           onClick={handleTaskClick}
                         />
                       ))}
@@ -630,7 +658,6 @@ export function WeekView({
               ref={(node) => setTimeScrollNode(pageIndex, node)}
               className="planner-scroll week-time-scroll overflow-y-auto overflow-x-hidden"
               onScroll={handleTimeScroll}
-              onWheel={isCurrentPage ? handleWheel : undefined}
             >
               <div
                 ref={isCurrentPage ? gridRef : undefined}
@@ -660,7 +687,7 @@ export function WeekView({
                       className="planner-grid-paper relative border-r border-[color:var(--planner-border)] last:border-r-0"
                       style={{ height: bodyHeight }}
                       onPointerDown={
-                        isCurrentPage
+                        isCurrentPage && editable
                           ? (event) => beginCreateHold(day, event)
                           : undefined
                       }
@@ -692,6 +719,7 @@ export function WeekView({
                             task={layout.task}
                             compact={isDense}
                             isDragging={isDragging}
+                            readOnly={!editable && layout.task.source !== "google"}
                             style={{
                               position: "absolute",
                               top: layout.top,
@@ -702,7 +730,9 @@ export function WeekView({
                             }}
                             onClick={handleTaskClick}
                             onPointerDown={
-                              isCurrentPage && layout.task.source !== "google"
+                              isCurrentPage &&
+                              editable &&
+                              layout.task.source !== "google"
                                 ? beginTaskDrag
                                 : undefined
                             }

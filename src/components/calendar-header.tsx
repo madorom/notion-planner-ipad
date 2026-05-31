@@ -8,18 +8,20 @@ import {
   CalendarX,
   ChevronLeft,
   ChevronRight,
+  Eye,
   Filter,
   LogOut,
   Menu,
   Moon,
   PanelLeftOpen,
+  PencilLine,
   RefreshCw,
   Settings,
   Sun,
 } from "lucide-react";
-import { formatDateLabel } from "@/lib/calendar";
+import { formatDateLabel, startOfPlannerWeek } from "@/lib/calendar";
 import { IconButton } from "@/components/icon-button";
-import type { ThemeMode } from "@/lib/storage";
+import type { InteractionMode, ThemeMode } from "@/lib/storage";
 import type { GoogleCalendarOption, StatusFilterOption } from "@/lib/types";
 import { cx } from "@/lib/utils";
 
@@ -28,6 +30,7 @@ type CalendarHeaderProps = {
   currentDate: Date;
   loading: boolean;
   themeMode: ThemeMode;
+  interactionMode: InteractionMode;
   googleConfigured: boolean;
   googleConnected: boolean;
   googleCalendars: GoogleCalendarOption[];
@@ -40,6 +43,7 @@ type CalendarHeaderProps = {
   onDateChange: (date: Date) => void;
   onRefresh: () => void;
   onToggleTheme: () => void;
+  onInteractionModeChange: (mode: InteractionMode) => void;
   onToggleGoogleCalendar: () => void;
   onToggleGoogleCalendarId: (calendarId: string) => void;
   onGoogleCalendarColorChange: (calendarId: string, color: string) => void;
@@ -83,6 +87,7 @@ export function CalendarHeader({
   currentDate,
   loading,
   themeMode,
+  interactionMode,
   googleConfigured,
   googleConnected,
   googleCalendars,
@@ -95,6 +100,7 @@ export function CalendarHeader({
   onDateChange,
   onRefresh,
   onToggleTheme,
+  onInteractionModeChange,
   onToggleGoogleCalendar,
   onToggleGoogleCalendarId,
   onGoogleCalendarColorChange,
@@ -106,8 +112,8 @@ export function CalendarHeader({
 }: CalendarHeaderProps) {
   const actionsMenuRef = useRef<HTMLDivElement | null>(null);
   const [actionsMenuOpen, setActionsMenuOpen] = useState(false);
-  const previousLabel = view === "week" ? "前の週" : "前の月";
-  const nextLabel = view === "week" ? "次の週" : "次の月";
+  const previousLabel = view === "week" ? "前の日" : "前の月";
+  const nextLabel = view === "week" ? "次の日" : "次の月";
   const hiddenStatusSet = new Set(hiddenStatuses);
   const activeFilterCount = hiddenStatuses.length;
   const themeLabel =
@@ -155,9 +161,13 @@ export function CalendarHeader({
   function shiftDate(amount: -1 | 1) {
     onDateChange(
       view === "week"
-        ? addDays(currentDate, amount * 7)
+        ? addDays(currentDate, amount)
         : addMonths(currentDate, amount),
     );
+  }
+
+  function goToday() {
+    onDateChange(view === "week" ? startOfPlannerWeek(new Date()) : new Date());
   }
 
   return (
@@ -409,7 +419,7 @@ export function CalendarHeader({
           </div>
         </div>
 
-        <div className="grid grid-cols-[1fr_auto] items-center gap-2 md:flex md:items-center md:gap-3">
+        <div className="grid gap-2 md:flex md:items-center md:gap-3">
           <div className="grid grid-cols-[44px_minmax(64px,1fr)_44px] gap-1.5 md:flex md:items-center md:gap-2">
             <IconButton
               label={previousLabel}
@@ -418,7 +428,7 @@ export function CalendarHeader({
             >
               <ChevronLeft className="h-5 w-5" />
             </IconButton>
-            <IconButton label="今日" onClick={() => onDateChange(new Date())}>
+            <IconButton label="今日" onClick={goToday}>
               <PanelLeftOpen className="mr-1.5 h-5 w-5 md:mr-2" />
               <span>今日</span>
             </IconButton>
@@ -431,25 +441,56 @@ export function CalendarHeader({
             </IconButton>
           </div>
 
-          <div className="grid grid-cols-2 rounded-lg border border-[color:var(--planner-border)] bg-[color:var(--planner-surface)] p-1 shadow-sm md:flex">
-            <button
-              type="button"
-              onClick={() => onViewChange("week")}
-              className={`min-h-10 rounded-md px-3 text-sm font-bold transition sm:px-5 ${
-                view === "week" ? "bg-ink text-white dark:bg-mint-500" : ""
-              }`}
-            >
-              週
-            </button>
-            <button
-              type="button"
-              onClick={() => onViewChange("month")}
-              className={`min-h-10 rounded-md px-3 text-sm font-bold transition sm:px-5 ${
-                view === "month" ? "bg-ink text-white dark:bg-mint-500" : ""
-              }`}
-            >
-              月
-            </button>
+          <div className="grid gap-2 sm:grid-cols-2 md:flex md:items-center">
+            <div className="grid grid-cols-2 rounded-lg border border-[color:var(--planner-border)] bg-[color:var(--planner-surface)] p-1 shadow-sm">
+              <button
+                type="button"
+                aria-pressed={interactionMode === "view"}
+                onClick={() => onInteractionModeChange("view")}
+                className={`inline-flex min-h-10 items-center justify-center gap-1.5 rounded-md px-3 text-sm font-bold transition sm:px-4 ${
+                  interactionMode === "view"
+                    ? "bg-ink text-white dark:bg-mint-500"
+                    : ""
+                }`}
+              >
+                <Eye className="h-4 w-4" />
+                閲覧
+              </button>
+              <button
+                type="button"
+                aria-pressed={interactionMode === "change"}
+                onClick={() => onInteractionModeChange("change")}
+                className={`inline-flex min-h-10 items-center justify-center gap-1.5 rounded-md px-3 text-sm font-bold transition sm:px-4 ${
+                  interactionMode === "change"
+                    ? "bg-coral-500 text-white"
+                    : ""
+                }`}
+              >
+                <PencilLine className="h-4 w-4" />
+                変更
+              </button>
+            </div>
+
+            <div className="grid grid-cols-2 rounded-lg border border-[color:var(--planner-border)] bg-[color:var(--planner-surface)] p-1 shadow-sm">
+              <button
+                type="button"
+                onClick={() => onViewChange("week")}
+                className={`min-h-10 rounded-md px-3 text-sm font-bold transition sm:px-5 ${
+                  view === "week" ? "bg-ink text-white dark:bg-mint-500" : ""
+                }`}
+              >
+                週
+              </button>
+              <button
+                type="button"
+                onClick={() => onViewChange("month")}
+                className={`min-h-10 rounded-md px-3 text-sm font-bold transition sm:px-5 ${
+                  view === "month" ? "bg-ink text-white dark:bg-mint-500" : ""
+                }`}
+              >
+                月
+              </button>
+            </div>
           </div>
         </div>
       </div>

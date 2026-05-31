@@ -16,6 +16,7 @@ import { cx } from "@/lib/utils";
 type MonthViewProps = {
   currentDate: Date;
   tasks: PlannerTask[];
+  editable: boolean;
   onCreate: (start: Date, end: Date) => void;
   onEdit: (task: PlannerTask) => void;
   onDateChange: (date: Date) => void;
@@ -26,6 +27,7 @@ const weekdays = ["月", "火", "水", "木", "金", "土", "日"];
 export function MonthView({
   currentDate,
   tasks,
+  editable,
   onCreate,
   onEdit,
   onDateChange,
@@ -53,7 +55,7 @@ export function MonthView({
   }, [currentDate]);
 
   function handleCreate(start: Date, end: Date) {
-    if (isSwipeClickSuppressed()) {
+    if (!editable || isSwipeClickSuppressed()) {
       return;
     }
 
@@ -61,7 +63,7 @@ export function MonthView({
   }
 
   function handleEdit(task: PlannerTask) {
-    if (isSwipeClickSuppressed()) {
+    if ((!editable && task.source !== "google") || isSwipeClickSuppressed()) {
       return;
     }
 
@@ -106,6 +108,8 @@ export function MonthView({
                     onClick={() => handleCreate(start, end)}
                     className={cx(
                       "min-h-[150px] border-b border-r border-[color:var(--planner-border)] bg-[color:var(--planner-surface)] p-2 text-left transition hover:bg-mint-500/5 active:bg-mint-500/10 md:min-h-[168px]",
+                      !editable &&
+                        "cursor-default hover:bg-[color:var(--planner-surface)] active:bg-[color:var(--planner-surface)]",
                       !isCurrentMonthDay(day, currentDate) && "opacity-45",
                       isSameDay(day, new Date()) && "bg-mint-500/10",
                     )}
@@ -127,6 +131,7 @@ export function MonthView({
                           key={task.id}
                           task={task}
                           compact
+                          readOnly={!editable && task.source !== "google"}
                           onClick={handleEdit}
                         />
                       ))}

@@ -17,6 +17,7 @@ type TaskCardProps = {
   compact?: boolean;
   style?: CSSProperties;
   isDragging?: boolean;
+  readOnly?: boolean;
   onClick: (task: PlannerTask) => void;
   onPointerDown?: (
     task: PlannerTask,
@@ -136,6 +137,7 @@ export function TaskCard({
   compact,
   style,
   isDragging,
+  readOnly,
   onClick,
   onPointerDown,
 }: TaskCardProps) {
@@ -201,17 +203,22 @@ export function TaskCard({
             }
           : {}),
         ...style,
-        touchAction: onPointerDown ? "none" : style?.touchAction,
+        touchAction: onPointerDown && !readOnly ? "none" : style?.touchAction,
       }}
       onClick={(event) => {
         event.preventDefault();
         event.stopPropagation();
-        if (event.detail !== 0 || isDragging) {
+        if (readOnly || event.detail !== 0 || isDragging) {
           return;
         }
         scheduleOpen();
       }}
       onPointerDown={(event) => {
+        event.stopPropagation();
+        if (readOnly) {
+          return;
+        }
+
         if (event.button !== 0) {
           return;
         }
@@ -250,7 +257,9 @@ export function TaskCard({
       className={cx(
         "w-full overflow-hidden rounded-lg border border-l-4 text-left shadow-sm transition hover:-translate-y-0.5 hover:shadow-planner-soft active:scale-[0.99]",
         customColor ? "bg-[color:var(--planner-surface)]" : theme.card,
-        onPointerDown && "cursor-grab active:cursor-grabbing",
+        readOnly &&
+          "cursor-default hover:translate-y-0 hover:shadow-sm active:scale-100",
+        onPointerDown && !readOnly && "cursor-grab active:cursor-grabbing",
         isDragging && "opacity-35 ring-2 ring-mint-500/40",
         compact ? "px-2 py-1.5" : "px-3 py-2.5",
       )}
