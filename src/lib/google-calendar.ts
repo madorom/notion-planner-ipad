@@ -5,7 +5,7 @@ import {
   randomBytes,
   timingSafeEqual,
 } from "crypto";
-import type { PlannerTask } from "@/lib/types";
+import type { GoogleCalendarOption, PlannerTask } from "@/lib/types";
 import { getAuthSecret } from "@/lib/auth";
 
 const GOOGLE_AUTH_URL = "https://accounts.google.com/o/oauth2/v2/auth";
@@ -47,6 +47,22 @@ type GoogleCalendarEvent = {
 
 type GoogleCalendarEventsResponse = {
   items?: GoogleCalendarEvent[];
+  error?: {
+    message?: string;
+  };
+};
+
+type GoogleCalendarListItem = {
+  id?: string;
+  summary?: string;
+  primary?: boolean;
+  selected?: boolean;
+  backgroundColor?: string;
+  accessRole?: string;
+};
+
+type GoogleCalendarListResponse = {
+  items?: GoogleCalendarListItem[];
   error?: {
     message?: string;
   };
@@ -234,6 +250,7 @@ async function parseGoogleResponse<T>(response: Response) {
     const errorBody = body as
       | GoogleOAuthTokenResponse
       | GoogleCalendarEventsResponse
+      | GoogleCalendarListResponse
       | null;
     const oauthError =
       (errorBody as GoogleOAuthTokenResponse | null)?.error_description ??
@@ -374,4 +391,41 @@ export async function queryGoogleCalendarTasks(
   return (data.items ?? [])
     .map(googleEventToTask)
     .filter((task): task is PlannerTask => task !== null);
+}
+
+export async function queryGoogleCalendarList(accessToken: string) {
+  const params = new URLSearchParams({
+    minAccessRole: "reader",
+    showHidden: "false",
+  });
+  const response = await fetch(
+    `${GOOGLE_CALENDAR_API_BASE}/users/me/calendarList?${params.toString()}`,
+    {
+      headers: {
+        Authorization: `Bearer ${accessToken}`,
+      },
+      cache: "no-store",
+    },
+  );
+  const data = await parseGoogleResponse<GoogleCalendarListResponse>(response);
+
+  return (data.items ?? [])
+    .filter((calendar) => calendar.id && calendar.summary && calendar.selected !== false)
+    .map(
+      (calendar): GoogleCalendarOption => ({
+        id: calendar.id ?? "",
+        summary: calendar.summary ?? "Google Calendar",
+        primary: calendar.primary,
+        backgroundColor: calendar.backgroundColor,
+      }),
+    )
+    .sort((a, b) => {
+      if (a.primary) {
+        return -1;
+      }
+      if (b.primary) {
+        return 1;
+      }
+      return a.summary.localeCompare(b.summary, "ja");
+    });
 }

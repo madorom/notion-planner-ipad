@@ -58,6 +58,13 @@ export type PlannerTask = {
   url?: string;
 };
 
+export type GoogleCalendarOption = {
+  id: string;
+  summary: string;
+  primary?: boolean;
+  backgroundColor?: string;
+};
+
 export type StatusFilterOption = {
   name: string;
   color?: string;

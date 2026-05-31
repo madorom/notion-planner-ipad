@@ -18,7 +18,7 @@ import {
 import { formatDateLabel } from "@/lib/calendar";
 import { IconButton } from "@/components/icon-button";
 import type { ThemeMode } from "@/lib/storage";
-import type { StatusFilterOption } from "@/lib/types";
+import type { GoogleCalendarOption, StatusFilterOption } from "@/lib/types";
 import { cx } from "@/lib/utils";
 
 type CalendarHeaderProps = {
@@ -28,6 +28,9 @@ type CalendarHeaderProps = {
   themeMode: ThemeMode;
   googleConfigured: boolean;
   googleConnected: boolean;
+  googleCalendars: GoogleCalendarOption[];
+  googleCalendarsLoading: boolean;
+  selectedGoogleCalendarId: string;
   statusOptions: StatusFilterOption[];
   hiddenStatuses: string[];
   onViewChange: (view: "week" | "month") => void;
@@ -35,6 +38,7 @@ type CalendarHeaderProps = {
   onRefresh: () => void;
   onToggleTheme: () => void;
   onToggleGoogleCalendar: () => void;
+  onGoogleCalendarChange: (calendarId: string) => void;
   onSettings: () => void;
   onToggleStatus: (status: string) => void;
   onShowAllStatuses: () => void;
@@ -72,6 +76,9 @@ export function CalendarHeader({
   themeMode,
   googleConfigured,
   googleConnected,
+  googleCalendars,
+  googleCalendarsLoading,
+  selectedGoogleCalendarId,
   statusOptions,
   hiddenStatuses,
   onViewChange,
@@ -79,6 +86,7 @@ export function CalendarHeader({
   onRefresh,
   onToggleTheme,
   onToggleGoogleCalendar,
+  onGoogleCalendarChange,
   onSettings,
   onToggleStatus,
   onShowAllStatuses,
@@ -96,6 +104,9 @@ export function CalendarHeader({
     : googleConnected
       ? "Google Calendar解除"
       : "Google Calendar接続";
+  const selectedCalendarInList = googleCalendars.some(
+    (calendar) => calendar.id === selectedGoogleCalendarId,
+  );
 
   return (
     <header className="sticky top-0 z-30 border-b border-[color:var(--planner-border)] bg-[color:var(--planner-bg)]/92 px-3 py-2 backdrop-blur md:px-6 md:py-3">
@@ -267,6 +278,31 @@ export function CalendarHeader({
               月
             </button>
           </div>
+
+          {googleConnected ? (
+            <label className="col-span-2 min-w-0 md:col-span-1 md:min-w-[240px]">
+              <span className="sr-only">Googleカレンダー</span>
+              <select
+                value={selectedGoogleCalendarId}
+                onChange={(event) => onGoogleCalendarChange(event.target.value)}
+                disabled={googleCalendarsLoading || googleCalendars.length === 0}
+                className="h-11 w-full rounded-lg border border-[color:var(--planner-border)] bg-[color:var(--planner-surface)] px-3 text-sm font-bold text-[color:var(--planner-text)] shadow-sm outline-none transition focus:border-mint-500 focus:ring-2 focus:ring-mint-500/20 disabled:opacity-60"
+                aria-label="Googleカレンダーを選択"
+              >
+                {!selectedCalendarInList ? (
+                  <option value={selectedGoogleCalendarId}>
+                    {googleCalendarsLoading ? "カレンダー読込中" : "メイン カレンダー"}
+                  </option>
+                ) : null}
+                {googleCalendars.map((calendar) => (
+                  <option key={calendar.id} value={calendar.id}>
+                    {calendar.summary}
+                    {calendar.primary ? "（メイン）" : ""}
+                  </option>
+                ))}
+              </select>
+            </label>
+          ) : null}
         </div>
       </div>
     </header>

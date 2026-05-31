@@ -3,6 +3,7 @@ import type { AppConfig } from "@/lib/types";
 const CONFIG_KEY = "notion-planner-ipad:v1";
 const HIDDEN_STATUSES_KEY = "notion-planner-ipad:hidden-statuses:v1";
 const THEME_MODE_KEY = "notion-planner-ipad:theme:v1";
+const GOOGLE_CALENDAR_ID_KEY = "notion-planner-ipad:google-calendar-id:v1";
 
 export type ThemeMode = "light" | "dark";
 
@@ -87,4 +88,17 @@ export function applyThemeMode(themeMode: ThemeMode) {
 export function saveThemeMode(themeMode: ThemeMode) {
   window.localStorage.setItem(THEME_MODE_KEY, themeMode);
   applyThemeMode(themeMode);
+}
+
+export function loadGoogleCalendarId() {
+  if (typeof window === "undefined") {
+    return null;
+  }
+
+  const stored = window.localStorage.getItem(GOOGLE_CALENDAR_ID_KEY);
+  return stored?.trim() || null;
+}
+
+export function saveGoogleCalendarId(calendarId: string) {
+  window.localStorage.setItem(GOOGLE_CALENDAR_ID_KEY, calendarId);
 }

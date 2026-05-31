@@ -14,14 +14,17 @@ import {
   clearConfig,
   applyThemeMode,
   loadConfig,
+  loadGoogleCalendarId,
   loadHiddenStatuses,
   loadThemeMode,
+  saveGoogleCalendarId,
   saveHiddenStatuses,
   saveThemeMode,
   type ThemeMode,
 } from "@/lib/storage";
 import type {
   AppConfig,
+  GoogleCalendarOption,
   NotionProperty,
   PlannerTask,
   StatusFilterOption,
@@ -98,6 +101,12 @@ export function PlannerApp() {
     configured: false,
     connected: false,
   });
+  const [googleCalendars, setGoogleCalendars] = useState<GoogleCalendarOption[]>(
+    [],
+  );
+  const [googleCalendarsLoading, setGoogleCalendarsLoading] = useState(false);
+  const [selectedGoogleCalendarId, setSelectedGoogleCalendarId] =
+    useState("primary");
 
   useEffect(() => {
     let active = true;
@@ -109,6 +118,7 @@ export function PlannerApp() {
       setSetupOpen(!stored);
       setHiddenStatuses(loadHiddenStatuses());
       setThemeMode(nextThemeMode);
+      setSelectedGoogleCalendarId(loadGoogleCalendarId() ?? "primary");
       applyThemeMode(nextThemeMode);
 
       try {
@@ -172,6 +182,88 @@ export function PlannerApp() {
     }
   }, [authStatus]);
 
+  const fetchGoogleCalendars = useCallback(async () => {
+    if (authStatus !== "authenticated" || !googleSession.connected) {
+      return;
+    }
+
+    setGoogleCalendarsLoading(true);
+
+    try {
+      const response = await fetch("/api/google/calendars", {
+        cache: "no-store",
+      });
+      const data = (await response.json()) as {
+        calendars?: GoogleCalendarOption[];
+        connected?: boolean;
+        error?: string;
+      };
+
+      if (!response.ok) {
+        if (response.status === 401) {
+          setAuthStatus("guest");
+        }
+        throw new Error(
+          data.error ?? "Googleカレンダー一覧を取得できませんでした。",
+        );
+      }
+
+      if (data.connected === false) {
+        setGoogleSession((current) => ({ ...current, connected: false }));
+        setGoogleCalendars([]);
+        return;
+      }
+
+      const calendars = data.calendars ?? [];
+      setGoogleCalendars(calendars);
+
+      setSelectedGoogleCalendarId((current) => {
+        if (calendars.some((calendar) => calendar.id === current)) {
+          return current;
+        }
+
+        const fallback =
+          calendars.find((calendar) => calendar.primary)?.id ??
+          calendars[0]?.id ??
+          "primary";
+        saveGoogleCalendarId(fallback);
+        return fallback;
+      });
+    } catch (calendarError) {
+      setError(
+        calendarError instanceof Error
+          ? calendarError.message
+          : "Googleカレンダー一覧を取得できませんでした。",
+      );
+    } finally {
+      setGoogleCalendarsLoading(false);
+    }
+  }, [authStatus, googleSession.connected]);
+
+  const googleCalendarIdForQuery = useMemo(() => {
+    if (!googleSession.connected) {
+      return "primary";
+    }
+
+    if (googleCalendars.length === 0) {
+      return "primary";
+    }
+
+    if (
+      googleCalendars.some(
+        (calendar) => calendar.id === selectedGoogleCalendarId,
+      )
+    ) {
+      return selectedGoogleCalendarId;
+    }
+
+    return (
+      googleCalendars.find((calendar) => calendar.primary)?.id ??
+      googleCalendars[0]?.id ??
+      "primary"
+    );
+  }, [googleCalendars, googleSession.connected, selectedGoogleCalendarId]);
+
   const fetchTasks = useCallback(async () => {
     if (!config || authStatus !== "authenticated") {
       return;
@@ -219,6 +311,7 @@ export function PlannerApp() {
           from: range.start.toISOString(),
           to: range.end.toISOString(),
         });
+        googleParams.set("calendarId", googleCalendarIdForQuery);
         const googleResponse = await fetch(
           `/api/google/events?${googleParams.toString()}`,
         );
@@ -253,6 +346,7 @@ export function PlannerApp() {
   }, [
     authStatus,
     config,
+    googleCalendarIdForQuery,
     googleSession.connected,
     range.end,
     range.start,
@@ -261,6 +355,15 @@ export function PlannerApp() {
   useEffect(() => {
     void fetchGoogleSession();
   }, [fetchGoogleSession]);
+
+  useEffect(() => {
+    if (googleSession.connected) {
+      void fetchGoogleCalendars();
+      return;
+    }
+
+    setGoogleCalendars([]);
+  }, [fetchGoogleCalendars, googleSession.connected]);
 
   useEffect(() => {
     void fetchTasks();
@@ -346,6 +449,11 @@ export function PlannerApp() {
     void disconnectGoogleCalendar();
   }
 
+  function changeGoogleCalendar(calendarId: string) {
+    setSelectedGoogleCalendarId(calendarId);
+    saveGoogleCalendarId(calendarId);
+  }
+
   async function disconnectGoogleCalendar() {
     setError("");
 
@@ -362,6 +470,7 @@ export function PlannerApp() {
       }
 
       setGoogleSession((current) => ({ ...current, connected: false }));
+      setGoogleCalendars([]);
       await fetchTasks();
     } catch (disconnectError) {
       setError(
@@ -621,6 +730,7 @@ export function PlannerApp() {
     setTasks([]);
     setError("");
     setGoogleSession({ configured: false, connected: false });
+    setGoogleCalendars([]);
     setUndoStack([]);
     setRedoStack([]);
     setAuthStatus("guest");
@@ -683,6 +793,9 @@ export function PlannerApp() {
         themeMode={themeMode}
         googleConfigured={googleSession.configured}
         googleConnected={googleSession.connected}
+        googleCalendars={googleCalendars}
+        googleCalendarsLoading={googleCalendarsLoading}
+        selectedGoogleCalendarId={selectedGoogleCalendarId}
         statusOptions={statusOptions}
         hiddenStatuses={hiddenStatuses}
         onViewChange={setView}
@@ -690,6 +803,7 @@ export function PlannerApp() {
         onRefresh={fetchTasks}
         onToggleTheme={toggleThemeMode}
         onToggleGoogleCalendar={toggleGoogleCalendar}
+        onGoogleCalendarChange={changeGoogleCalendar}
         onSettings={() => setSetupOpen(true)}
         onToggleStatus={toggleStatus}
         onShowAllStatuses={showAllStatuses}
