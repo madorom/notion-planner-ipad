@@ -38,9 +38,11 @@ type WeekViewProps = {
   currentDate: Date;
   tasks: PlannerTask[];
   editable: boolean;
+  showAllDayTasks: boolean;
   onCreate: (start: Date, end: Date) => void;
   onEdit: (task: PlannerTask) => void;
   onDateChange: (date: Date) => void;
+  onVisibleDateChange: (date: Date) => void;
   onMoveTask: (task: PlannerTask, start: Date, end: Date) => void;
 };
 
@@ -202,12 +204,14 @@ export function WeekView({
   currentDate,
   tasks,
   editable,
+  showAllDayTasks,
   onCreate,
   onEdit,
   onDateChange,
+  onVisibleDateChange,
   onMoveTask,
 }: WeekViewProps) {
-  const anchorDate = startOfDay(currentDate);
+  const anchorDate = useMemo(() => startOfDay(currentDate), [currentDate]);
   const days = useMemo(
     () =>
       Array.from(
@@ -227,6 +231,7 @@ export function WeekView({
   const pendingScrollAdjustmentRef = useRef(0);
   const isRepositioningRef = useRef(false);
   const lastWindowShiftAtRef = useRef(0);
+  const lastVisibleDateKeyRef = useRef("");
   const dragSessionRef = useRef<DragSession | null>(null);
   const dragPreviewRef = useRef<DragPreview | null>(null);
   const createHoldSessionRef = useRef<CreateHoldSession | null>(null);
@@ -427,6 +432,23 @@ export function WeekView({
     onDateChange(addDays(currentDate, direction * CONTINUOUS_SHIFT_DAYS));
   }
 
+  function reportVisibleDate(node: HTMLDivElement, columnWidth: number) {
+    const dayIndex = clamp(
+      Math.floor(node.scrollLeft / columnWidth + 0.35),
+      0,
+      days.length - 1,
+    );
+    const visibleDate = days[dayIndex];
+    const visibleDateKey = format(visibleDate, "yyyy-MM-dd");
+
+    if (visibleDateKey === lastVisibleDateKeyRef.current) {
+      return;
+    }
+
+    lastVisibleDateKeyRef.current = visibleDateKey;
+    onVisibleDateChange(visibleDate);
+  }
+
   function handleHorizontalScroll(event: UIEvent<HTMLDivElement>) {
     if (isRepositioningRef.current) {
       return;
@@ -434,6 +456,8 @@ export function WeekView({
 
     const node = event.currentTarget;
     const columnWidth = columnWidthFor(node, days.length);
+    reportVisibleDate(node, columnWidth);
+
     const edgeDistance = columnWidth * CONTINUOUS_EDGE_DAYS;
     const maxScrollLeft = node.scrollWidth - node.clientWidth;
 
@@ -522,10 +546,7 @@ export function WeekView({
   }
 
   function handleTaskClick(task: PlannerTask) {
-    if (
-      (!editable && task.source !== "google") ||
-      Date.now() < suppressClickUntilRef.current
-    ) {
+    if (Date.now() < suppressClickUntilRef.current) {
       return;
     }
 
@@ -545,7 +566,7 @@ export function WeekView({
               className="grid border-b border-[color:var(--planner-border)] bg-[color:var(--planner-surface)]"
               style={{ gridTemplateColumns }}
             >
-              <div className="border-r border-[color:var(--planner-border)]" />
+              <div className="sticky left-0 z-30 border-r border-[color:var(--planner-border)] bg-[color:var(--planner-surface)] shadow-[6px_0_14px_rgba(15,23,42,0.05)]" />
               {days.map((day) => (
                 <div
                   key={day.toISOString()}
@@ -563,46 +584,48 @@ export function WeekView({
               ))}
             </div>
 
-            <div
-              className="grid border-b border-[color:var(--planner-border)] bg-[color:var(--planner-surface-muted)]"
-              style={{ gridTemplateColumns }}
-            >
-              <div className="border-r border-[color:var(--planner-border)] px-2 py-3 text-right text-xs font-bold text-[color:var(--planner-soft)]">
-                終日
-              </div>
-              {days.map((day) => {
-                const allDayTasks = allDayTasksForDay(tasks, day);
-                const visibleAllDayTasks = allDayTasks.slice(0, 3);
-                const hiddenAllDayCount =
-                  allDayTasks.length - visibleAllDayTasks.length;
+            {showAllDayTasks ? (
+              <div
+                className="grid border-b border-[color:var(--planner-border)] bg-[color:var(--planner-surface-muted)]"
+                style={{ gridTemplateColumns }}
+              >
+                <div className="sticky left-0 z-30 border-r border-[color:var(--planner-border)] bg-[color:var(--planner-surface-muted)] px-2 py-3 text-right text-xs font-bold text-[color:var(--planner-soft)] shadow-[6px_0_14px_rgba(15,23,42,0.05)]">
+                  終日
+                </div>
+                {days.map((day) => {
+                  const allDayTasks = allDayTasksForDay(tasks, day);
+                  const visibleAllDayTasks = allDayTasks.slice(0, 3);
+                  const hiddenAllDayCount =
+                    allDayTasks.length - visibleAllDayTasks.length;
 
-                return (
-                  <div
-                    key={`all-day-${day.toISOString()}`}
-                    className={`min-h-[68px] border-r border-[color:var(--planner-border)] p-2 last:border-r-0 ${
-                      isSameDay(day, new Date()) ? "bg-mint-500/10" : ""
-                    }`}
-                  >
-                    <div className="grid max-h-[132px] gap-1.5 overflow-y-auto pr-1 planner-scroll">
-                      {visibleAllDayTasks.map((task) => (
-                        <TaskCard
-                          key={task.id}
-                          task={task}
-                          compact
-                          readOnly={!editable && task.source !== "google"}
-                          onClick={handleTaskClick}
-                        />
-                      ))}
-                      {hiddenAllDayCount > 0 ? (
-                        <div className="rounded-md bg-[color:var(--planner-surface)] px-2 py-1 text-xs font-bold text-[color:var(--planner-soft)]">
-                          +{hiddenAllDayCount}件
-                        </div>
-                      ) : null}
+                  return (
+                    <div
+                      key={`all-day-${day.toISOString()}`}
+                      className={`min-h-[68px] border-r border-[color:var(--planner-border)] p-2 last:border-r-0 ${
+                        isSameDay(day, new Date()) ? "bg-mint-500/10" : ""
+                      }`}
+                    >
+                      <div className="grid max-h-[132px] gap-1.5 overflow-y-auto pr-1 planner-scroll">
+                        {visibleAllDayTasks.map((task) => (
+                          <TaskCard
+                            key={task.id}
+                            task={task}
+                            compact
+                            readOnly={!editable && task.source !== "google"}
+                            onClick={handleTaskClick}
+                          />
+                        ))}
+                        {hiddenAllDayCount > 0 ? (
+                          <div className="rounded-md bg-[color:var(--planner-surface)] px-2 py-1 text-xs font-bold text-[color:var(--planner-soft)]">
+                            +{hiddenAllDayCount}件
+                          </div>
+                        ) : null}
+                      </div>
                     </div>
-                  </div>
-                );
-              })}
-            </div>
+                  );
+                })}
+              </div>
+            ) : null}
 
             <div
               ref={timeScrollRef}
@@ -614,7 +637,7 @@ export function WeekView({
                 className="grid"
                 style={{ minHeight: bodyHeight, gridTemplateColumns }}
               >
-                <div className="relative border-r border-[color:var(--planner-border)] bg-[color:var(--planner-surface-muted)]">
+                <div className="sticky left-0 z-20 border-r border-[color:var(--planner-border)] bg-[color:var(--planner-surface-muted)] shadow-[6px_0_14px_rgba(15,23,42,0.05)]">
                   {hours.map((hour) => (
                     <div
                       key={hour}

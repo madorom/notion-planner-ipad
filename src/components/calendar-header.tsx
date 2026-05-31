@@ -31,6 +31,7 @@ type CalendarHeaderProps = {
   loading: boolean;
   themeMode: ThemeMode;
   interactionMode: InteractionMode;
+  showAllDayTasks: boolean;
   googleConfigured: boolean;
   googleConnected: boolean;
   googleCalendars: GoogleCalendarOption[];
@@ -44,6 +45,7 @@ type CalendarHeaderProps = {
   onRefresh: () => void;
   onToggleTheme: () => void;
   onInteractionModeChange: (mode: InteractionMode) => void;
+  onToggleAllDayTasks: () => void;
   onToggleGoogleCalendar: () => void;
   onToggleGoogleCalendarId: (calendarId: string) => void;
   onGoogleCalendarColorChange: (calendarId: string, color: string) => void;
@@ -88,6 +90,7 @@ export function CalendarHeader({
   loading,
   themeMode,
   interactionMode,
+  showAllDayTasks,
   googleConfigured,
   googleConnected,
   googleCalendars,
@@ -101,6 +104,7 @@ export function CalendarHeader({
   onRefresh,
   onToggleTheme,
   onInteractionModeChange,
+  onToggleAllDayTasks,
   onToggleGoogleCalendar,
   onToggleGoogleCalendarId,
   onGoogleCalendarColorChange,
@@ -116,6 +120,7 @@ export function CalendarHeader({
   const nextLabel = view === "week" ? "次の日" : "次の月";
   const hiddenStatusSet = new Set(hiddenStatuses);
   const activeFilterCount = hiddenStatuses.length;
+  const activeMenuCount = activeFilterCount + (showAllDayTasks ? 0 : 1);
   const themeLabel =
     themeMode === "dark" ? "ホワイトモード" : "ダークモード";
   const googleLabel = !googleConfigured
@@ -203,14 +208,14 @@ export function CalendarHeader({
             <div ref={actionsMenuRef} className="relative">
               <IconButton
                 label="メニュー"
-                active={activeFilterCount > 0 || googleConnected}
+                active={activeMenuCount > 0 || googleConnected}
                 className="gap-2 px-2 md:px-3"
                 onClick={() => setActionsMenuOpen((open) => !open)}
               >
                 <Menu className="h-5 w-5" />
-                {activeFilterCount > 0 ? (
+                {activeMenuCount > 0 ? (
                   <span className="rounded-full bg-white/25 px-1.5 text-xs">
-                    {activeFilterCount}
+                    {activeMenuCount}
                   </span>
                 ) : null}
               </IconButton>
@@ -257,6 +262,21 @@ export function CalendarHeader({
                       <CalendarCheck className="h-5 w-5 text-mint-600" />
                     )}
                     <span className="min-w-0 flex-1 truncate">{googleLabel}</span>
+                  </button>
+                  <button
+                    type="button"
+                    onClick={onToggleAllDayTasks}
+                    className={cx(
+                      "flex min-h-11 items-center gap-3 rounded-lg border px-3 text-left text-sm font-bold transition active:scale-[0.99]",
+                      showAllDayTasks
+                        ? "border-[color:var(--planner-border)] bg-[color:var(--planner-surface-muted)]"
+                        : "border-coral-500/40 bg-coral-500/10 text-coral-500",
+                    )}
+                  >
+                    <CalendarDays className="h-5 w-5" />
+                    <span className="min-w-0 flex-1 truncate">
+                      {showAllDayTasks ? "終日予定を表示中" : "終日予定を非表示中"}
+                    </span>
                   </button>
                   <button
                     type="button"

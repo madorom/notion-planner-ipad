@@ -31,6 +31,7 @@ type TaskModalProps = {
   state: ModalState;
   config: AppConfig;
   saving: boolean;
+  readOnly?: boolean;
   onClose: () => void;
   onSave: (task: TaskInput, existingTask?: PlannerTask) => Promise<void>;
 };
@@ -65,6 +66,34 @@ function initialFromState(state: ModalState) {
   };
 }
 
+function extractUrls(value: string) {
+  return Array.from(value.matchAll(/https?:\/\/[^\s]+/g), (match) =>
+    match[0].replace(/[),.。]+$/, ""),
+  );
+}
+
+function NotionIcon({ task }: { task?: PlannerTask }) {
+  if (!task?.icon) {
+    return null;
+  }
+
+  if (task.icon.type === "emoji") {
+    return (
+      <span className="text-3xl leading-none" aria-hidden="true">
+        {task.icon.value}
+      </span>
+    );
+  }
+
+  return (
+    <span
+      className="h-9 w-9 rounded-lg bg-cover bg-center"
+      style={{ backgroundImage: `url("${task.icon.value}")` }}
+      aria-hidden="true"
+    />
+  );
+}
+
 export function taskPropertyTypes(config: AppConfig) {
   const mapping = config.mapping;
   return {
@@ -80,6 +109,7 @@ export function TaskModal({
   state,
   config,
   saving,
+  readOnly,
   onClose,
   onSave,
 }: TaskModalProps) {
@@ -95,9 +125,14 @@ export function TaskModal({
   const hasTags = Boolean(config.mapping.tags);
   const existingTask = state.mode === "edit" ? state.task : undefined;
   const isSidePanel = state.mode === "edit";
+  const memoUrls = extractUrls(form.memo);
 
   async function submit(event: FormEvent<HTMLFormElement>) {
     event.preventDefault();
+    if (readOnly) {
+      return;
+    }
+
     setError("");
 
     if (!form.title.trim()) {
@@ -156,13 +191,24 @@ export function TaskModal({
               "sticky top-0 z-10 -mx-5 -mt-5 border-b border-[color:var(--planner-border)] bg-[color:var(--planner-surface)] px-5 py-4 md:-mx-6 md:-mt-6 md:px-6",
           )}
         >
-          <div>
+          <div className="flex min-w-0 items-center gap-3">
+            <NotionIcon task={existingTask} />
+            <div className="min-w-0">
             <p className="text-sm font-bold text-mint-600">
-              {state.mode === "create" ? "新規タスク" : "タスク編集"}
+              {state.mode === "create"
+                ? "新規タスク"
+                : readOnly
+                  ? "タスク詳細"
+                  : "タスク編集"}
             </p>
             <h2 className="text-2xl font-bold">
-              {state.mode === "create" ? "予定を追加" : "予定を更新"}
+              {state.mode === "create"
+                ? "予定を追加"
+                : readOnly
+                  ? "内容を確認"
+                  : "予定を更新"}
             </h2>
+            </div>
           </div>
           <IconButton label="閉じる" type="button" onClick={onClose}>
             <X className="h-5 w-5" />
@@ -177,10 +223,14 @@ export function TaskModal({
             <input
               autoFocus
               value={form.title}
+              readOnly={readOnly}
               onChange={(event) =>
                 setForm((current) => ({ ...current, title: event.target.value }))
               }
-              className="min-h-12 rounded-lg border border-[color:var(--planner-border)] bg-[color:var(--planner-surface)] px-4 text-lg font-semibold outline-none transition focus:border-mint-500"
+              className={cx(
+                "min-h-12 rounded-lg border border-[color:var(--planner-border)] bg-[color:var(--planner-surface)] px-4 text-lg font-semibold outline-none transition focus:border-mint-500",
+                readOnly && "cursor-default bg-[color:var(--planner-surface-muted)]",
+              )}
             />
           </label>
 
@@ -192,10 +242,14 @@ export function TaskModal({
               <input
                 type="datetime-local"
                 value={form.start}
+                readOnly={readOnly}
                 onChange={(event) =>
                   setForm((current) => ({ ...current, start: event.target.value }))
                 }
-                className="min-h-12 rounded-lg border border-[color:var(--planner-border)] bg-[color:var(--planner-surface)] px-4 text-base outline-none transition focus:border-mint-500"
+                className={cx(
+                  "min-h-12 rounded-lg border border-[color:var(--planner-border)] bg-[color:var(--planner-surface)] px-4 text-base outline-none transition focus:border-mint-500",
+                  readOnly && "cursor-default bg-[color:var(--planner-surface-muted)]",
+                )}
               />
             </label>
 
@@ -206,10 +260,14 @@ export function TaskModal({
               <input
                 type="datetime-local"
                 value={form.end}
+                readOnly={readOnly}
                 onChange={(event) =>
                   setForm((current) => ({ ...current, end: event.target.value }))
                 }
-                className="min-h-12 rounded-lg border border-[color:var(--planner-border)] bg-[color:var(--planner-surface)] px-4 text-base outline-none transition focus:border-mint-500"
+                className={cx(
+                  "min-h-12 rounded-lg border border-[color:var(--planner-border)] bg-[color:var(--planner-surface)] px-4 text-base outline-none transition focus:border-mint-500",
+                  readOnly && "cursor-default bg-[color:var(--planner-surface-muted)]",
+                )}
               />
             </label>
           </div>
@@ -222,6 +280,7 @@ export function TaskModal({
               {statusOptions.length > 0 ? (
                 <select
                   value={form.status}
+                  disabled={readOnly}
                   onChange={(event) =>
                     setForm((current) => ({ ...current, status: event.target.value }))
                   }
@@ -237,6 +296,7 @@ export function TaskModal({
               ) : (
                 <input
                   value={form.status}
+                  readOnly={readOnly}
                   onChange={(event) =>
                     setForm((current) => ({ ...current, status: event.target.value }))
                   }
@@ -253,12 +313,29 @@ export function TaskModal({
               </span>
               <textarea
                 value={form.memo}
+                readOnly={readOnly}
                 onChange={(event) =>
                   setForm((current) => ({ ...current, memo: event.target.value }))
                 }
                 rows={4}
                 className="rounded-lg border border-[color:var(--planner-border)] bg-[color:var(--planner-surface)] px-4 py-3 text-base outline-none transition focus:border-mint-500"
               />
+              {readOnly && memoUrls.length > 0 ? (
+                <div className="grid gap-1">
+                  {memoUrls.map((url) => (
+                    <a
+                      key={url}
+                      href={url}
+                      target="_blank"
+                      rel="noreferrer"
+                      className="inline-flex min-h-9 items-center gap-2 rounded-lg border border-[color:var(--planner-border)] px-3 text-sm font-bold text-mint-600"
+                    >
+                      <ExternalLink className="h-4 w-4" />
+                      <span className="truncate">{url}</span>
+                    </a>
+                  ))}
+                </div>
+              ) : null}
             </label>
           ) : null}
 
@@ -269,6 +346,7 @@ export function TaskModal({
               </span>
               <input
                 value={form.tags}
+                readOnly={readOnly}
                 onChange={(event) =>
                   setForm((current) => ({ ...current, tags: event.target.value }))
                 }
@@ -301,7 +379,7 @@ export function TaskModal({
 
           <button
             type="submit"
-            disabled={saving}
+            disabled={saving || readOnly}
             className="inline-flex min-h-12 items-center justify-center gap-2 rounded-lg bg-mint-500 px-6 text-base font-bold text-white shadow-planner-soft transition active:scale-[0.99] disabled:cursor-not-allowed disabled:opacity-50"
           >
             {saving ? (
@@ -309,7 +387,7 @@ export function TaskModal({
             ) : (
               <Save className="h-5 w-5" />
             )}
-            保存
+            {readOnly ? "閲覧中" : "保存"}
           </button>
         </div>
       </form>

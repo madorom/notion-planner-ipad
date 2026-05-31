@@ -2,6 +2,7 @@ import type {
   NotionOption,
   NotionProperty,
   NotionPropertyType,
+  NotionIcon,
   PlannerTask,
   PropertyMapping,
   TaskInput,
@@ -45,8 +46,14 @@ type NotionPage = {
   object: "page";
   id: string;
   url?: string;
+  icon?: NotionApiIcon | null;
   properties: Record<string, Record<string, unknown> & { type?: string }>;
 };
+
+type NotionApiIcon =
+  | { type: "emoji"; emoji?: string }
+  | { type: "external"; external?: { url?: string } }
+  | { type: "file"; file?: { url?: string } };
 
 type NotionQueryResponse = {
   results: NotionPage[];
@@ -66,6 +73,12 @@ type NotionBlock = {
 
 type NotionBlockChildrenResponse = {
   results: NotionBlock[];
+  has_more: boolean;
+  next_cursor: string | null;
+};
+
+type NotionSearchResponse = {
+  results: NotionDatabase[];
   has_more: boolean;
   next_cursor: string | null;
 };
@@ -158,6 +171,26 @@ function plainTitle(
 ) {
   const title = richTexts?.map((part) => part.plain_text ?? "").join("").trim();
   return title || fallback;
+}
+
+function normalizeIcon(icon?: NotionApiIcon | null): NotionIcon | undefined {
+  if (!icon) {
+    return undefined;
+  }
+
+  if (icon.type === "emoji" && icon.emoji) {
+    return { type: "emoji", value: icon.emoji };
+  }
+
+  if (icon.type === "external" && icon.external?.url) {
+    return { type: "external", value: icon.external.url };
+  }
+
+  if (icon.type === "file" && icon.file?.url) {
+    return { type: "file", value: icon.file.url };
+  }
+
+  return undefined;
 }
 
 export function normalizeProperties(
@@ -349,6 +382,50 @@ export async function resolveDataSource(token: string, rawTargetId: string) {
   };
 }
 
+export async function listDatabases(token: string) {
+  const databases: NotionDatabase[] = [];
+  let cursor: string | undefined;
+
+  do {
+    const response = await notionFetch<NotionSearchResponse>(token, "/search", {
+      method: "POST",
+      body: JSON.stringify({
+        page_size: 100,
+        start_cursor: cursor,
+        filter: {
+          property: "object",
+          value: "database",
+        },
+        sort: {
+          direction: "ascending",
+          timestamp: "last_edited_time",
+        },
+      }),
+    });
+
+    databases.push(...response.results);
+    cursor = response.next_cursor ?? undefined;
+    if (!response.has_more) {
+      cursor = undefined;
+    }
+  } while (cursor);
+
+  return databases.flatMap((database) => {
+    const name = plainTitle(database.title);
+    const dataSources = database.data_sources ?? [];
+
+    if (dataSources.length === 0) {
+      return [];
+    }
+
+    return dataSources.map((dataSource) => ({
+      databaseId: database.id,
+      dataSourceId: dataSource.id,
+      name: dataSource.name ? `${name} / ${dataSource.name}` : name,
+    }));
+  });
+}
+
 function richTextToPlain(value: unknown) {
   if (!Array.isArray(value)) {
     return "";
@@ -449,6 +526,7 @@ export function pageToTask(
     memo: getMemo(page, mapping.memo),
     tags: getTags(page, mapping.tags),
     url: page.url,
+    icon: normalizeIcon(page.icon),
     status: status.status,
     statusColor,
   };

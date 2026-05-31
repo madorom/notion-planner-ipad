@@ -1,14 +1,15 @@
 "use client";
 
-import { useMemo, useState } from "react";
+import { useEffect, useMemo, useState } from "react";
 import { Check, Database, LoaderCircle, RefreshCw } from "lucide-react";
 import type {
   AppConfig,
+  NotionDatabaseOption,
   NotionProperty,
   PropertyMapping,
   SchemaResponse,
 } from "@/lib/types";
-import { saveConfig } from "@/lib/storage";
+import { loadKnownConfigs, saveConfig } from "@/lib/storage";
 import { cx, shortId } from "@/lib/utils";
 
 type SetupPanelProps = {
@@ -36,6 +37,10 @@ export function SetupPanel({ initialConfig, onReady }: SetupPanelProps) {
   const [targetId, setTargetId] = useState(
     initialConfig?.dataSourceId ?? initialConfig?.targetId ?? "",
   );
+  const [knownConfigs, setKnownConfigs] = useState<AppConfig[]>([]);
+  const [databaseOptions, setDatabaseOptions] = useState<NotionDatabaseOption[]>(
+    [],
+  );
   const [schema, setSchema] = useState<SchemaResponse | null>(
     initialConfig
       ? {
@@ -56,7 +61,12 @@ export function SetupPanel({ initialConfig, onReady }: SetupPanelProps) {
     },
   );
   const [loading, setLoading] = useState(false);
+  const [databasesLoading, setDatabasesLoading] = useState(false);
   const [error, setError] = useState("");
+
+  useEffect(() => {
+    setKnownConfigs(loadKnownConfigs());
+  }, []);
 
   const titleProperties = useMemo(
     () => propertyOptions(schema?.properties ?? [], ["title"]),
@@ -78,6 +88,64 @@ export function SetupPanel({ initialConfig, onReady }: SetupPanelProps) {
     () => propertyOptions(schema?.properties ?? [], ["multi_select"]),
     [schema],
   );
+
+  function applyConfig(nextConfig: AppConfig) {
+    setTargetId(nextConfig.dataSourceId ?? nextConfig.targetId);
+    setSchema({
+      databaseId: nextConfig.databaseId,
+      dataSourceId: nextConfig.dataSourceId ?? nextConfig.targetId,
+      name: nextConfig.targetName ?? "Notion database",
+      properties: nextConfig.properties,
+    });
+    setMapping(nextConfig.mapping);
+    setError("");
+  }
+
+  async function fetchDatabases() {
+    setDatabasesLoading(true);
+    setError("");
+
+    try {
+      const response = await fetch("/api/notion/databases", {
+        cache: "no-store",
+      });
+      const data = (await response.json()) as {
+        databases?: NotionDatabaseOption[];
+        error?: string;
+      };
+
+      if (!response.ok) {
+        throw new Error(data.error ?? "Notionデータベース一覧を取得できませんでした。");
+      }
+
+      setDatabaseOptions(data.databases ?? []);
+
+      if ((data.databases ?? []).length === 0) {
+        setError("共有済みのNotionデータベースが見つかりませんでした。");
+      }
+    } catch (databaseError) {
+      setError(
+        databaseError instanceof Error
+          ? databaseError.message
+          : "Notionデータベース一覧を取得できませんでした。",
+      );
+    } finally {
+      setDatabasesLoading(false);
+    }
+  }
+
+  function selectDatabaseOption(dataSourceId: string) {
+    setTargetId(dataSourceId);
+    setSchema(null);
+    setMapping({
+      title: "",
+      date: "",
+      status: undefined,
+      memo: undefined,
+      tags: undefined,
+    });
+    setError("");
+  }
 
   async function connect() {
     setLoading(true);
@@ -131,6 +199,7 @@ export function SetupPanel({ initialConfig, onReady }: SetupPanelProps) {
     };
 
     saveConfig(config);
+    setKnownConfigs(loadKnownConfigs());
     onReady(config);
   }
 
@@ -186,6 +255,86 @@ export function SetupPanel({ initialConfig, onReady }: SetupPanelProps) {
               <span className="ml-2 font-mono">{shortId(schema.dataSourceId)}</span>
             </div>
           ) : null}
+        </div>
+
+        {knownConfigs.length > 0 ? (
+          <div className="mb-5 rounded-lg border border-[color:var(--planner-border)] bg-[color:var(--planner-surface-muted)] p-3">
+            <div className="mb-3 flex items-center justify-between gap-3">
+              <p className="text-sm font-bold text-[color:var(--planner-soft)]">
+                保存済みDB
+              </p>
+              <span className="text-xs font-bold text-[color:var(--planner-soft)]">
+                {knownConfigs.length}件
+              </span>
+            </div>
+            <div className="grid gap-2 sm:grid-cols-2">
+              {knownConfigs.map((knownConfig) => {
+                const knownTargetId =
+                  knownConfig.dataSourceId ?? knownConfig.targetId;
+                const selected = knownTargetId === targetId;
+
+                return (
+                  <button
+                    key={knownTargetId}
+                    type="button"
+                    onClick={() => applyConfig(knownConfig)}
+                    className={cx(
+                      "min-h-12 rounded-lg border px-3 text-left transition active:scale-[0.99]",
+                      selected
+                        ? "border-mint-500/50 bg-mint-500/10"
+                        : "border-[color:var(--planner-border)] bg-[color:var(--planner-surface)]",
+                    )}
+                  >
+                    <span className="block truncate text-sm font-bold">
+                      {knownConfig.targetName ?? "Notion database"}
+                    </span>
+                    <span className="mt-1 block font-mono text-xs text-[color:var(--planner-soft)]">
+                      {shortId(knownTargetId)}
+                    </span>
+                  </button>
+                );
+              })}
+            </div>
+          </div>
+        ) : null}
+
+        <div className="mb-5 rounded-lg border border-[color:var(--planner-border)] bg-[color:var(--planner-surface-muted)] p-3">
+          <div className="flex flex-col gap-3 md:flex-row md:items-end">
+            <label className="grid flex-1 gap-2">
+              <span className="text-sm font-semibold text-[color:var(--planner-soft)]">
+                共有済みNotion DB
+              </span>
+              <select
+                value={
+                  databaseOptions.some((option) => option.dataSourceId === targetId)
+                    ? targetId
+                    : ""
+                }
+                onChange={(event) => selectDatabaseOption(event.target.value)}
+                className="min-h-12 rounded-lg border border-[color:var(--planner-border)] bg-[color:var(--planner-surface)] px-4 text-base outline-none transition focus:border-mint-500"
+              >
+                <option value="">一覧から選択</option>
+                {databaseOptions.map((option) => (
+                  <option key={option.dataSourceId} value={option.dataSourceId}>
+                    {option.name}
+                  </option>
+                ))}
+              </select>
+            </label>
+            <button
+              type="button"
+              onClick={fetchDatabases}
+              disabled={databasesLoading}
+              className="inline-flex min-h-12 items-center justify-center gap-2 rounded-lg border border-[color:var(--planner-border)] bg-[color:var(--planner-surface)] px-4 text-sm font-bold transition active:scale-[0.99] disabled:cursor-not-allowed disabled:opacity-50"
+            >
+              {databasesLoading ? (
+                <LoaderCircle className="h-5 w-5 animate-spin" />
+              ) : (
+                <RefreshCw className="h-5 w-5" />
+              )}
+              一覧取得
+            </button>
+          </div>
         </div>
 
         <div className="grid gap-4 md:grid-cols-[1fr_auto] md:items-end">

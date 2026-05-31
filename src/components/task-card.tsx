@@ -132,6 +132,28 @@ function rgba(hex: string, alpha: number) {
   return `rgba(${rgb.r}, ${rgb.g}, ${rgb.b}, ${alpha})`;
 }
 
+function NotionIcon({ task }: { task: PlannerTask }) {
+  if (!task.icon) {
+    return null;
+  }
+
+  if (task.icon.type === "emoji") {
+    return (
+      <span className="shrink-0 text-base leading-none" aria-hidden="true">
+        {task.icon.value}
+      </span>
+    );
+  }
+
+  return (
+    <span
+      className="h-4 w-4 shrink-0 rounded bg-cover bg-center"
+      style={{ backgroundImage: `url("${task.icon.value}")` }}
+      aria-hidden="true"
+    />
+  );
+}
+
 export function TaskCard({
   task,
   compact,
@@ -208,16 +230,13 @@ export function TaskCard({
       onClick={(event) => {
         event.preventDefault();
         event.stopPropagation();
-        if (readOnly || event.detail !== 0 || isDragging) {
+        if (event.detail !== 0 || isDragging) {
           return;
         }
         scheduleOpen();
       }}
       onPointerDown={(event) => {
         event.stopPropagation();
-        if (readOnly) {
-          return;
-        }
 
         if (event.button !== 0) {
           return;
@@ -230,7 +249,9 @@ export function TaskCard({
           y: event.clientY,
           cancelled: false,
         };
-        onPointerDown?.(task, event);
+        if (!readOnly) {
+          onPointerDown?.(task, event);
+        }
       }}
       onPointerMove={updatePointerCancellation}
       onPointerCancel={() => {
@@ -264,14 +285,17 @@ export function TaskCard({
         compact ? "px-2 py-1.5" : "px-3 py-2.5",
       )}
     >
-      <div
-        className={cx(
-          "line-clamp-2 font-bold leading-snug",
-          customColor ? "text-[color:var(--planner-ink)]" : theme.title,
-          compact ? "text-xs" : "text-sm",
-        )}
-      >
-        {task.title}
+      <div className="flex min-w-0 items-start gap-1.5">
+        <NotionIcon task={task} />
+        <div
+          className={cx(
+            "line-clamp-2 min-w-0 font-bold leading-snug",
+            customColor ? "text-[color:var(--planner-ink)]" : theme.title,
+            compact ? "text-xs" : "text-sm",
+          )}
+        >
+          {task.title}
+        </div>
       </div>
       <div
         className={cx(

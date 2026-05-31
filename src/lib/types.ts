@@ -44,6 +44,16 @@ export type AppConfig = {
   mapping: PropertyMapping;
 };
 
+export type NotionIcon =
+  | {
+      type: "emoji";
+      value: string;
+    }
+  | {
+      type: "external" | "file";
+      value: string;
+    };
+
 export type PlannerTask = {
   id: string;
   title: string;
@@ -59,6 +69,7 @@ export type PlannerTask = {
   memo?: string;
   tags: string[];
   url?: string;
+  icon?: NotionIcon;
 };
 
 export type GoogleCalendarOption = {
@@ -88,6 +99,12 @@ export type SchemaResponse = {
   dataSourceId: string;
   name: string;
   properties: NotionProperty[];
+};
+
+export type NotionDatabaseOption = {
+  databaseId?: string;
+  dataSourceId: string;
+  name: string;
 };
 
 export type TaskMutationPayload = {

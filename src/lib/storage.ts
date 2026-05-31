@@ -1,9 +1,11 @@
 import type { AppConfig } from "@/lib/types";
 
 const CONFIG_KEY = "notion-planner-ipad:v1";
+const CONFIGS_KEY = "notion-planner-ipad:configs:v1";
 const HIDDEN_STATUSES_KEY = "notion-planner-ipad:hidden-statuses:v1";
 const THEME_MODE_KEY = "notion-planner-ipad:theme:v1";
 const INTERACTION_MODE_KEY = "notion-planner-ipad:interaction-mode:v1";
+const SHOW_ALL_DAY_TASKS_KEY = "notion-planner-ipad:show-all-day:v1";
 const GOOGLE_CALENDAR_ID_KEY = "notion-planner-ipad:google-calendar-id:v1";
 const GOOGLE_CALENDAR_IDS_KEY = "notion-planner-ipad:google-calendar-ids:v1";
 const GOOGLE_CALENDAR_COLORS_KEY =
@@ -38,10 +40,55 @@ export function loadConfig(): AppConfig | null {
 
 export function saveConfig(config: AppConfig) {
   window.localStorage.setItem(CONFIG_KEY, JSON.stringify(config));
+  saveKnownConfig(config);
 }
 
 export function clearConfig() {
   window.localStorage.removeItem(CONFIG_KEY);
+}
+
+function configKey(config: AppConfig) {
+  return config.dataSourceId ?? config.targetId;
+}
+
+export function loadKnownConfigs() {
+  if (typeof window === "undefined") {
+    return [];
+  }
+
+  const raw = window.localStorage.getItem(CONFIGS_KEY);
+  if (!raw) {
+    return [];
+  }
+
+  try {
+    const parsed = JSON.parse(raw);
+    return Array.isArray(parsed)
+      ? parsed.filter((value): value is AppConfig => {
+          return (
+            value &&
+            typeof value === "object" &&
+            typeof value.targetId === "string" &&
+            Array.isArray(value.properties) &&
+            value.mapping &&
+            typeof value.mapping.title === "string" &&
+            typeof value.mapping.date === "string"
+          );
+        })
+      : [];
+  } catch {
+    window.localStorage.removeItem(CONFIGS_KEY);
+    return [];
+  }
+}
+
+export function saveKnownConfig(config: AppConfig) {
+  const configs = loadKnownConfigs();
+  const next = [
+    config,
+    ...configs.filter((item) => configKey(item) !== configKey(config)),
+  ].slice(0, 20);
+  window.localStorage.setItem(CONFIGS_KEY, JSON.stringify(next));
 }
 
 export function loadHiddenStatuses() {
@@ -93,6 +140,21 @@ export function applyThemeMode(themeMode: ThemeMode) {
 export function saveThemeMode(themeMode: ThemeMode) {
   window.localStorage.setItem(THEME_MODE_KEY, themeMode);
   applyThemeMode(themeMode);
+}
+
+export function loadShowAllDayTasks() {
+  if (typeof window === "undefined") {
+    return true;
+  }
+
+  return window.localStorage.getItem(SHOW_ALL_DAY_TASKS_KEY) !== "false";
+}
+
+export function saveShowAllDayTasks(showAllDayTasks: boolean) {
+  window.localStorage.setItem(
+    SHOW_ALL_DAY_TASKS_KEY,
+    showAllDayTasks ? "true" : "false",
+  );
 }
 
 function isInteractionMode(value: string | null): value is InteractionMode {

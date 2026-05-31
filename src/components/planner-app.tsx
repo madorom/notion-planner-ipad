@@ -18,11 +18,13 @@ import {
   loadGoogleCalendarIds,
   loadHiddenStatuses,
   loadInteractionMode,
+  loadShowAllDayTasks,
   loadThemeMode,
   saveGoogleCalendarColors,
   saveGoogleCalendarIds,
   saveHiddenStatuses,
   saveInteractionMode,
+  saveShowAllDayTasks,
   saveThemeMode,
   type InteractionMode,
   type ThemeMode,
@@ -105,12 +107,16 @@ export function PlannerApp() {
   const [currentDate, setCurrentDate] = useState(() =>
     startOfPlannerWeek(new Date()),
   );
+  const [displayDate, setDisplayDate] = useState(() =>
+    startOfPlannerWeek(new Date()),
+  );
   const [tasks, setTasks] = useState<PlannerTask[]>([]);
   const [loading, setLoading] = useState(false);
   const [saving, setSaving] = useState(false);
   const [error, setError] = useState("");
   const [modal, setModal] = useState<ModalState>(null);
   const [hiddenStatuses, setHiddenStatuses] = useState<string[]>([]);
+  const [showAllDayTasks, setShowAllDayTasks] = useState(true);
   const [undoStack, setUndoStack] = useState<TaskHistoryAction[]>([]);
   const [redoStack, setRedoStack] = useState<TaskHistoryAction[]>([]);
   const [historyBusy, setHistoryBusy] = useState(false);
@@ -141,6 +147,7 @@ export function PlannerApp() {
       setConfig(stored);
       setSetupOpen(!stored);
       setHiddenStatuses(loadHiddenStatuses());
+      setShowAllDayTasks(loadShowAllDayTasks());
       setThemeMode(nextThemeMode);
       setInteractionMode(loadInteractionMode());
       setSelectedGoogleCalendarIds(loadGoogleCalendarIds());
@@ -484,9 +491,16 @@ export function PlannerApp() {
   const visibleTasks = useMemo(() => {
     const hiddenStatusSet = new Set(hiddenStatuses);
     return tasksWithCalendarColors.filter(
-      (task) => !task.status || !hiddenStatusSet.has(task.status),
+      (task) =>
+        (showAllDayTasks || !task.isAllDay) &&
+        (!task.status || !hiddenStatusSet.has(task.status)),
     );
-  }, [hiddenStatuses, tasksWithCalendarColors]);
+  }, [hiddenStatuses, showAllDayTasks, tasksWithCalendarColors]);
+
+  function changeDate(date: Date) {
+    setCurrentDate(date);
+    setDisplayDate(date);
+  }
 
   function toggleStatus(status: string) {
     setHiddenStatuses((current) => {
@@ -501,6 +515,14 @@ export function PlannerApp() {
   function showAllStatuses() {
     saveHiddenStatuses([]);
     setHiddenStatuses([]);
+  }
+
+  function toggleAllDayTasks() {
+    setShowAllDayTasks((current) => {
+      const next = !current;
+      saveShowAllDayTasks(next);
+      return next;
+    });
   }
 
   function toggleThemeMode() {
@@ -524,7 +546,11 @@ export function PlannerApp() {
     setView(nextView);
 
     if (nextView === "week") {
-      setCurrentDate((date) => startOfPlannerWeek(date));
+      setCurrentDate((date) => {
+        const next = startOfPlannerWeek(date);
+        setDisplayDate(next);
+        return next;
+      });
     }
   }
 
@@ -895,10 +921,6 @@ export function PlannerApp() {
   const editable = interactionMode === "change";
 
   function openTask(task: PlannerTask) {
-    if (!editable && task.source !== "google") {
-      return;
-    }
-
     if (task.source === "google") {
       if (task.url) {
         window.open(task.url, "_blank", "noopener,noreferrer");
@@ -913,10 +935,11 @@ export function PlannerApp() {
     <div className="min-h-dvh">
       <CalendarHeader
         view={view}
-        currentDate={currentDate}
+        currentDate={displayDate}
         loading={loading}
         themeMode={themeMode}
         interactionMode={interactionMode}
+        showAllDayTasks={showAllDayTasks}
         googleConfigured={googleSession.configured}
         googleConnected={googleSession.connected}
         googleCalendars={googleCalendars}
@@ -926,10 +949,11 @@ export function PlannerApp() {
         statusOptions={statusOptions}
         hiddenStatuses={hiddenStatuses}
         onViewChange={changeView}
-        onDateChange={setCurrentDate}
+        onDateChange={changeDate}
         onRefresh={fetchTasks}
         onToggleTheme={toggleThemeMode}
         onInteractionModeChange={changeInteractionMode}
+        onToggleAllDayTasks={toggleAllDayTasks}
         onToggleGoogleCalendar={toggleGoogleCalendar}
         onToggleGoogleCalendarId={toggleGoogleCalendarId}
         onGoogleCalendarColorChange={changeGoogleCalendarColor}
@@ -954,9 +978,11 @@ export function PlannerApp() {
           currentDate={currentDate}
           tasks={visibleTasks}
           editable={editable}
+          showAllDayTasks={showAllDayTasks}
           onCreate={(start, end) => setModal({ mode: "create", start, end })}
           onEdit={openTask}
           onDateChange={setCurrentDate}
+          onVisibleDateChange={setDisplayDate}
           onMoveTask={moveTask}
         />
       ) : (
@@ -964,9 +990,9 @@ export function PlannerApp() {
           currentDate={currentDate}
           tasks={visibleTasks}
           editable={editable}
-          onDateChange={setCurrentDate}
+          onDateChange={changeDate}
           onCreate={(start, end) => {
-            setCurrentDate(start);
+            changeDate(start);
             setModal({ mode: "create", start, end });
           }}
           onEdit={openTask}
@@ -1023,6 +1049,7 @@ export function PlannerApp() {
           state={modal}
           config={config}
           saving={saving}
+          readOnly={!editable && modal.mode === "edit"}
           onClose={() => setModal(null)}
           onSave={saveTask}
         />

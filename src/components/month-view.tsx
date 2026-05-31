@@ -63,7 +63,7 @@ export function MonthView({
   }
 
   function handleEdit(task: PlannerTask) {
-    if ((!editable && task.source !== "google") || isSwipeClickSuppressed()) {
+    if (isSwipeClickSuppressed()) {
       return;
     }
 
@@ -107,15 +107,15 @@ export function MonthView({
                     type="button"
                     onClick={() => handleCreate(start, end)}
                     className={cx(
-                      "min-h-[150px] border-b border-r border-[color:var(--planner-border)] bg-[color:var(--planner-surface)] p-2 text-left transition hover:bg-mint-500/5 active:bg-mint-500/10 md:min-h-[168px]",
+                      "flex min-h-[150px] flex-col items-stretch justify-start border-b border-r border-[color:var(--planner-border)] bg-[color:var(--planner-surface)] p-2 text-left transition hover:bg-mint-500/5 active:bg-mint-500/10 md:min-h-[168px]",
                       !editable &&
                         "cursor-default hover:bg-[color:var(--planner-surface)] active:bg-[color:var(--planner-surface)]",
                       !isCurrentMonthDay(day, currentDate) && "opacity-45",
                       isSameDay(day, new Date()) && "bg-mint-500/10",
                     )}
                   >
-                    <div className="mb-2 flex items-center justify-between">
-                      <span className="flex h-8 w-8 items-center justify-center rounded-lg text-sm font-bold">
+                    <div className="mb-2 flex items-start justify-between">
+                      <span className="inline-flex h-8 w-8 items-start justify-start rounded-lg pt-1 text-sm font-bold leading-none">
                         {format(day, "d")}
                       </span>
                       {dayTasks.length > 0 ? (
