@@ -1,6 +1,7 @@
 "use client";
 
 import { addDays, addMonths } from "date-fns";
+import { useEffect, useRef, useState } from "react";
 import {
   CalendarCheck,
   CalendarDays,
@@ -103,9 +104,10 @@ export function CalendarHeader({
   onShowAllStatuses,
   onLogout,
 }: CalendarHeaderProps) {
-  const step = view === "week" ? addDays : addMonths;
-  const previousLabel = view === "week" ? "前日" : "前の月";
-  const nextLabel = view === "week" ? "翌日" : "次の月";
+  const actionsMenuRef = useRef<HTMLDivElement | null>(null);
+  const [actionsMenuOpen, setActionsMenuOpen] = useState(false);
+  const previousLabel = view === "week" ? "前の週" : "前の月";
+  const nextLabel = view === "week" ? "次の週" : "次の月";
   const hiddenStatusSet = new Set(hiddenStatuses);
   const activeFilterCount = hiddenStatuses.length;
   const themeLabel =
@@ -123,6 +125,44 @@ export function CalendarHeader({
     selectedGoogleCalendars.length > 0
       ? `Googleカレンダー ${selectedGoogleCalendars.length}件`
       : "Googleカレンダー選択";
+
+  useEffect(() => {
+    if (!actionsMenuOpen) {
+      return;
+    }
+
+    function handlePointerDown(event: PointerEvent) {
+      if (
+        actionsMenuRef.current &&
+        event.target instanceof Node &&
+        !actionsMenuRef.current.contains(event.target)
+      ) {
+        setActionsMenuOpen(false);
+      }
+    }
+
+    function handleKeyDown(event: KeyboardEvent) {
+      if (event.key === "Escape") {
+        setActionsMenuOpen(false);
+      }
+    }
+
+    document.addEventListener("pointerdown", handlePointerDown, true);
+    document.addEventListener("keydown", handleKeyDown);
+
+    return () => {
+      document.removeEventListener("pointerdown", handlePointerDown, true);
+      document.removeEventListener("keydown", handleKeyDown);
+    };
+  }, [actionsMenuOpen]);
+
+  function shiftDate(amount: -1 | 1) {
+    onDateChange(
+      view === "week"
+        ? addDays(currentDate, amount * 7)
+        : addMonths(currentDate, amount),
+    );
+  }
 
   return (
     <header className="sticky top-0 z-30 border-b border-[color:var(--planner-border)] bg-[color:var(--planner-bg)]/92 px-3 py-2 backdrop-blur md:px-6 md:py-3">
@@ -154,11 +194,12 @@ export function CalendarHeader({
             <IconButton label="設定" onClick={onSettings} className="px-2 md:px-3">
               <Settings className="h-5 w-5" />
             </IconButton>
-            <div className="group relative">
+            <div ref={actionsMenuRef} className="relative">
               <IconButton
                 label="メニュー"
                 active={activeFilterCount > 0 || googleConnected}
                 className="gap-2 px-2 md:px-3"
+                onClick={() => setActionsMenuOpen((open) => !open)}
               >
                 <Menu className="h-5 w-5" />
                 {activeFilterCount > 0 ? (
@@ -167,11 +208,21 @@ export function CalendarHeader({
                   </span>
                 ) : null}
               </IconButton>
-              <div className="invisible fixed left-3 right-3 top-[96px] z-50 rounded-xl border border-[color:var(--planner-border)] bg-[color:var(--planner-surface)] p-3 opacity-0 shadow-planner transition group-focus-within:visible group-focus-within:opacity-100 group-hover:visible group-hover:opacity-100 md:absolute md:left-auto md:right-0 md:top-[calc(100%+8px)] md:w-[min(92vw,420px)]">
+              <div
+                className={cx(
+                  "fixed left-3 right-3 top-[96px] z-50 rounded-xl border border-[color:var(--planner-border)] bg-[color:var(--planner-surface)] p-3 shadow-planner transition md:absolute md:left-auto md:right-0 md:top-[calc(100%+8px)] md:w-[min(92vw,420px)]",
+                  actionsMenuOpen
+                    ? "visible opacity-100"
+                    : "invisible pointer-events-none opacity-0",
+                )}
+              >
                 <div className="grid gap-2 border-b border-[color:var(--planner-border)] pb-3">
                   <button
                     type="button"
-                    onClick={onToggleTheme}
+                    onClick={() => {
+                      onToggleTheme();
+                      setActionsMenuOpen(false);
+                    }}
                     className="flex min-h-11 items-center gap-3 rounded-lg border border-[color:var(--planner-border)] bg-[color:var(--planner-surface-muted)] px-3 text-left text-sm font-bold transition active:scale-[0.99]"
                   >
                     {themeMode === "dark" ? (
@@ -183,7 +234,10 @@ export function CalendarHeader({
                   </button>
                   <button
                     type="button"
-                    onClick={onToggleGoogleCalendar}
+                    onClick={() => {
+                      onToggleGoogleCalendar();
+                      setActionsMenuOpen(false);
+                    }}
                     className={cx(
                       "flex min-h-11 items-center gap-3 rounded-lg border px-3 text-left text-sm font-bold transition active:scale-[0.99]",
                       googleConnected
@@ -200,7 +254,10 @@ export function CalendarHeader({
                   </button>
                   <button
                     type="button"
-                    onClick={onLogout}
+                    onClick={() => {
+                      setActionsMenuOpen(false);
+                      onLogout();
+                    }}
                     className="flex min-h-11 items-center gap-3 rounded-lg border border-[color:var(--planner-border)] bg-[color:var(--planner-surface-muted)] px-3 text-left text-sm font-bold text-coral-500 transition active:scale-[0.99]"
                   >
                     <LogOut className="h-5 w-5" />
@@ -270,7 +327,7 @@ export function CalendarHeader({
           <div className="grid grid-cols-[44px_minmax(64px,1fr)_44px] gap-1.5 md:flex md:items-center md:gap-2">
             <IconButton
               label={previousLabel}
-              onClick={() => onDateChange(step(currentDate, -1))}
+              onClick={() => shiftDate(-1)}
               className="px-2 md:px-3"
             >
               <ChevronLeft className="h-5 w-5" />
@@ -281,7 +338,7 @@ export function CalendarHeader({
             </IconButton>
             <IconButton
               label={nextLabel}
-              onClick={() => onDateChange(step(currentDate, 1))}
+              onClick={() => shiftDate(1)}
               className="px-2 md:px-3"
             >
               <ChevronRight className="h-5 w-5" />

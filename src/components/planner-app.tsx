@@ -64,7 +64,7 @@ type TaskHistoryAction =
     };
 
 const HISTORY_LIMIT = 30;
-const WEEK_PREVIEW_DAY_BUFFER = 1;
+const WEEK_PREVIEW_DAY_BUFFER = 7;
 const FALLBACK_GOOGLE_COLOR = "#4285f4";
 
 function resolveStatusProperty(config: AppConfig | null): NotionProperty | undefined {

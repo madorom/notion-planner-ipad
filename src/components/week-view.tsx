@@ -60,7 +60,8 @@ const WHEEL_SETTLE_DELAY_MS = 180;
 const TIME_AXIS_WIDTH = 72;
 const DRAG_START_DISTANCE = 8;
 const DRAG_SNAP_MINUTES = 15;
-const WEEK_PAGE_DAY_OFFSETS = [-1, 0, 1] as const;
+const WEEK_SWIPE_DAY_STEP = 7;
+const WEEK_PAGE_DAY_OFFSETS = [-WEEK_SWIPE_DAY_STEP, 0, WEEK_SWIPE_DAY_STEP] as const;
 
 type LayoutTask = {
   task: PlannerTask;
@@ -223,7 +224,8 @@ export function WeekView({
     swipeHandlers,
   } = useHorizontalDateSwipe({
     disabled: Boolean(dragSessionRef.current?.active),
-    onSwipe: (direction) => onDateChange(addDays(currentDate, direction)),
+    onSwipe: (direction) =>
+      onDateChange(addDays(currentDate, direction * WEEK_SWIPE_DAY_STEP)),
   });
 
   const dragPointToPreview = useCallback(
@@ -362,17 +364,17 @@ export function WeekView({
       onMoveTask(session.task, preview.start, preview.end);
     }
 
-    window.addEventListener("pointermove", handlePointerMove);
-    window.addEventListener("pointerup", finishPointerDrag);
-    window.addEventListener("pointercancel", finishPointerDrag);
+    window.addEventListener("pointermove", handlePointerMove, true);
+    window.addEventListener("pointerup", finishPointerDrag, true);
+    window.addEventListener("pointercancel", finishPointerDrag, true);
 
     return () => {
       if (wheelSettleTimerRef.current) {
         clearTimeout(wheelSettleTimerRef.current);
       }
-      window.removeEventListener("pointermove", handlePointerMove);
-      window.removeEventListener("pointerup", finishPointerDrag);
-      window.removeEventListener("pointercancel", finishPointerDrag);
+      window.removeEventListener("pointermove", handlePointerMove, true);
+      window.removeEventListener("pointerup", finishPointerDrag, true);
+      window.removeEventListener("pointercancel", finishPointerDrag, true);
     };
   }, [dragPointToPreview, onMoveTask]);
 
@@ -447,7 +449,7 @@ export function WeekView({
     wheelOffsetRef.current = direction > 0 ? -WHEEL_MAX_OFFSET : WHEEL_MAX_OFFSET;
     setWheelOffset(wheelOffsetRef.current);
     lastWheelSlideAtRef.current = now;
-    onDateChange(addDays(currentDate, direction));
+    onDateChange(addDays(currentDate, direction * WEEK_SWIPE_DAY_STEP));
   }
 
   function pointerMinuteFromY(clientY: number) {
