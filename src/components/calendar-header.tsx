@@ -9,6 +9,7 @@ import {
   ChevronRight,
   Filter,
   LogOut,
+  Menu,
   Moon,
   PanelLeftOpen,
   RefreshCw,
@@ -142,71 +143,6 @@ export function CalendarHeader({
           </div>
 
           <div className="flex shrink-0 items-center gap-1.5 md:gap-2">
-            <div className="group relative">
-              <IconButton
-                label="ステータスフィルター"
-                active={activeFilterCount > 0}
-                className="gap-2 px-2 md:px-3"
-              >
-                <Filter className="h-5 w-5" />
-                {activeFilterCount > 0 ? (
-                  <span className="rounded-full bg-white/25 px-1.5 text-xs">
-                    {activeFilterCount}
-                  </span>
-                ) : null}
-              </IconButton>
-              <div className="invisible fixed left-3 right-3 top-[96px] z-50 rounded-xl border border-[color:var(--planner-border)] bg-[color:var(--planner-surface)] p-3 opacity-0 shadow-planner transition group-focus-within:visible group-focus-within:opacity-100 group-hover:visible group-hover:opacity-100 md:absolute md:left-auto md:right-0 md:top-[calc(100%+8px)] md:w-[min(92vw,360px)]">
-                <div className="mb-3 flex items-center justify-between gap-3">
-                  <p className="text-sm font-bold">ステータス</p>
-                  <button
-                    type="button"
-                    onClick={onShowAllStatuses}
-                    className="min-h-9 rounded-lg px-3 text-xs font-bold text-mint-600"
-                  >
-                    すべて表示
-                  </button>
-                </div>
-                <div className="grid max-h-[50dvh] gap-2 overflow-auto planner-scroll">
-                  {statusOptions.length > 0 ? (
-                    statusOptions.map((option) => {
-                      const visible = !hiddenStatusSet.has(option.name);
-
-                      return (
-                        <button
-                          key={option.name}
-                          type="button"
-                          onClick={() => onToggleStatus(option.name)}
-                          className={cx(
-                            "flex min-h-11 items-center gap-3 rounded-lg border px-3 text-left transition active:scale-[0.99]",
-                            visible
-                              ? "border-[color:var(--planner-border)] bg-[color:var(--planner-surface-muted)]"
-                              : "border-transparent opacity-45",
-                          )}
-                        >
-                          <span
-                            className={cx(
-                              "h-3 w-3 shrink-0 rounded-full",
-                              filterColorClass(option.color),
-                            )}
-                          />
-                          <span className="min-w-0 flex-1 truncate text-sm font-semibold">
-                            {option.name}
-                          </span>
-                          <span className="rounded-full bg-[color:var(--planner-surface)] px-2 py-0.5 text-xs font-bold text-[color:var(--planner-soft)]">
-                            {option.count}
-                          </span>
-                        </button>
-                      );
-                    })
-                  ) : (
-                    <p className="rounded-lg bg-[color:var(--planner-surface-muted)] px-3 py-2 text-sm text-[color:var(--planner-soft)]">
-                      ステータスなし
-                    </p>
-                  )}
-                </div>
-              </div>
-            </div>
-
             <IconButton
               label="再読み込み"
               onClick={onRefresh}
@@ -215,39 +151,118 @@ export function CalendarHeader({
             >
               <RefreshCw className={`h-5 w-5 ${loading ? "animate-spin" : ""}`} />
             </IconButton>
-            <IconButton
-              label={themeLabel}
-              onClick={onToggleTheme}
-              className="px-2 md:px-3"
-            >
-              {themeMode === "dark" ? (
-                <Sun className="h-5 w-5" />
-              ) : (
-                <Moon className="h-5 w-5" />
-              )}
-            </IconButton>
-            <IconButton
-              label={googleLabel}
-              active={googleConnected}
-              onClick={onToggleGoogleCalendar}
-              className="px-2 md:px-3"
-            >
-              {googleConnected ? (
-                <CalendarX className="h-5 w-5" />
-              ) : (
-                <CalendarCheck className="h-5 w-5" />
-              )}
-            </IconButton>
             <IconButton label="設定" onClick={onSettings} className="px-2 md:px-3">
               <Settings className="h-5 w-5" />
             </IconButton>
-            <IconButton
-              label="ログアウト"
-              onClick={onLogout}
-              className="px-2 md:px-3"
-            >
-              <LogOut className="h-5 w-5" />
-            </IconButton>
+            <div className="group relative">
+              <IconButton
+                label="メニュー"
+                active={activeFilterCount > 0 || googleConnected}
+                className="gap-2 px-2 md:px-3"
+              >
+                <Menu className="h-5 w-5" />
+                {activeFilterCount > 0 ? (
+                  <span className="rounded-full bg-white/25 px-1.5 text-xs">
+                    {activeFilterCount}
+                  </span>
+                ) : null}
+              </IconButton>
+              <div className="invisible fixed left-3 right-3 top-[96px] z-50 rounded-xl border border-[color:var(--planner-border)] bg-[color:var(--planner-surface)] p-3 opacity-0 shadow-planner transition group-focus-within:visible group-focus-within:opacity-100 group-hover:visible group-hover:opacity-100 md:absolute md:left-auto md:right-0 md:top-[calc(100%+8px)] md:w-[min(92vw,420px)]">
+                <div className="grid gap-2 border-b border-[color:var(--planner-border)] pb-3">
+                  <button
+                    type="button"
+                    onClick={onToggleTheme}
+                    className="flex min-h-11 items-center gap-3 rounded-lg border border-[color:var(--planner-border)] bg-[color:var(--planner-surface-muted)] px-3 text-left text-sm font-bold transition active:scale-[0.99]"
+                  >
+                    {themeMode === "dark" ? (
+                      <Sun className="h-5 w-5 text-amber-500" />
+                    ) : (
+                      <Moon className="h-5 w-5 text-sky-500" />
+                    )}
+                    <span className="min-w-0 flex-1 truncate">{themeLabel}</span>
+                  </button>
+                  <button
+                    type="button"
+                    onClick={onToggleGoogleCalendar}
+                    className={cx(
+                      "flex min-h-11 items-center gap-3 rounded-lg border px-3 text-left text-sm font-bold transition active:scale-[0.99]",
+                      googleConnected
+                        ? "border-mint-500/40 bg-mint-500/10"
+                        : "border-[color:var(--planner-border)] bg-[color:var(--planner-surface-muted)]",
+                    )}
+                  >
+                    {googleConnected ? (
+                      <CalendarX className="h-5 w-5 text-mint-600" />
+                    ) : (
+                      <CalendarCheck className="h-5 w-5 text-mint-600" />
+                    )}
+                    <span className="min-w-0 flex-1 truncate">{googleLabel}</span>
+                  </button>
+                  <button
+                    type="button"
+                    onClick={onLogout}
+                    className="flex min-h-11 items-center gap-3 rounded-lg border border-[color:var(--planner-border)] bg-[color:var(--planner-surface-muted)] px-3 text-left text-sm font-bold text-coral-500 transition active:scale-[0.99]"
+                  >
+                    <LogOut className="h-5 w-5" />
+                    <span className="min-w-0 flex-1 truncate">ログアウト</span>
+                  </button>
+                </div>
+
+                <div className="pt-3">
+                  <div className="mb-3 flex items-center justify-between gap-3">
+                    <p className="flex items-center gap-2 text-sm font-bold">
+                      <Filter className="h-4 w-4" />
+                      ステータス
+                    </p>
+                    <button
+                      type="button"
+                      onClick={onShowAllStatuses}
+                      className="min-h-9 rounded-lg px-3 text-xs font-bold text-mint-600"
+                    >
+                      すべて表示
+                    </button>
+                  </div>
+                  <div className="grid max-h-[42dvh] gap-2 overflow-auto planner-scroll">
+                    {statusOptions.length > 0 ? (
+                      statusOptions.map((option) => {
+                        const visible = !hiddenStatusSet.has(option.name);
+
+                        return (
+                          <button
+                            key={option.name}
+                            type="button"
+                            onClick={() => onToggleStatus(option.name)}
+                            className={cx(
+                              "flex min-h-11 items-center gap-3 rounded-lg border px-3 text-left transition active:scale-[0.99]",
+                              visible
+                                ? "border-[color:var(--planner-border)] bg-[color:var(--planner-surface-muted)]"
+                                : "border-transparent opacity-45",
+                            )}
+                          >
+                            <span
+                              className={cx(
+                                "h-3 w-3 shrink-0 rounded-full",
+                                filterColorClass(option.color),
+                              )}
+                            />
+                            <span className="min-w-0 flex-1 truncate text-sm font-semibold">
+                              {option.name}
+                            </span>
+                            <span className="rounded-full bg-[color:var(--planner-surface)] px-2 py-0.5 text-xs font-bold text-[color:var(--planner-soft)]">
+                              {option.count}
+                            </span>
+                          </button>
+                        );
+                      })
+                    ) : (
+                      <p className="rounded-lg bg-[color:var(--planner-surface-muted)] px-3 py-2 text-sm text-[color:var(--planner-soft)]">
+                        ステータスなし
+                      </p>
+                    )}
+                  </div>
+                </div>
+              </div>
+            </div>
           </div>
         </div>
 
