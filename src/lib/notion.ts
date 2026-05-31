@@ -32,6 +32,10 @@ type NotionDataSource = {
   id: string;
   title?: Array<{ plain_text?: string }>;
   name?: string;
+  parent?: {
+    type?: string;
+    database_id?: string;
+  };
   properties: Record<string, NotionPropertySchema>;
 };
 
@@ -78,7 +82,7 @@ type NotionBlockChildrenResponse = {
 };
 
 type NotionSearchResponse = {
-  results: NotionDatabase[];
+  results: NotionDataSource[];
   has_more: boolean;
   next_cursor: string | null;
 };
@@ -383,7 +387,7 @@ export async function resolveDataSource(token: string, rawTargetId: string) {
 }
 
 export async function listDatabases(token: string) {
-  const databases: NotionDatabase[] = [];
+  const dataSources: NotionDataSource[] = [];
   let cursor: string | undefined;
 
   do {
@@ -394,7 +398,7 @@ export async function listDatabases(token: string) {
         start_cursor: cursor,
         filter: {
           property: "object",
-          value: "database",
+          value: "data_source",
         },
         sort: {
           direction: "ascending",
@@ -403,27 +407,21 @@ export async function listDatabases(token: string) {
       }),
     });
 
-    databases.push(...response.results);
+    dataSources.push(...response.results);
     cursor = response.next_cursor ?? undefined;
     if (!response.has_more) {
       cursor = undefined;
     }
   } while (cursor);
 
-  return databases.flatMap((database) => {
-    const name = plainTitle(database.title);
-    const dataSources = database.data_sources ?? [];
-
-    if (dataSources.length === 0) {
-      return [];
-    }
-
-    return dataSources.map((dataSource) => ({
-      databaseId: database.id,
-      dataSourceId: dataSource.id,
-      name: dataSource.name ? `${name} / ${dataSource.name}` : name,
-    }));
-  });
+  return dataSources.map((dataSource) => ({
+    databaseId:
+      dataSource.parent?.type === "database_id"
+        ? dataSource.parent.database_id
+        : undefined,
+    dataSourceId: dataSource.id,
+    name: dataSource.name ?? plainTitle(dataSource.title, "Notion data source"),
+  }));
 }
 
 function richTextToPlain(value: unknown) {
