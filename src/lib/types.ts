@@ -79,6 +79,13 @@ export type GoogleCalendarOption = {
   backgroundColor?: string;
 };
 
+export type GoogleUserProfile = {
+  sub: string;
+  email?: string;
+  name?: string;
+  picture?: string;
+};
+
 export type StatusFilterOption = {
   name: string;
   color?: string;
@@ -105,6 +112,18 @@ export type NotionDatabaseOption = {
   databaseId?: string;
   dataSourceId: string;
   name: string;
+};
+
+export type UserSettings = {
+  notionConfigs: AppConfig[];
+  activeNotionDataSourceId?: string | null;
+  hiddenStatuses: string[];
+  showAllDayTasks: boolean;
+  themeMode: "light" | "dark";
+  interactionMode: "view" | "change";
+  selectedGoogleCalendarIds: string[];
+  googleCalendarColors: Record<string, string>;
+  updatedAt?: string;
 };
 
 export type TaskMutationPayload = {

@@ -1,7 +1,7 @@
 "use client";
 
 import { addDays } from "date-fns";
-import { useCallback, useEffect, useMemo, useState } from "react";
+import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { AlertCircle, LoaderCircle, Redo2, Undo2 } from "lucide-react";
 import { CalendarHeader } from "@/components/calendar-header";
 import { LoginPanel } from "@/components/login-panel";
@@ -18,12 +18,15 @@ import {
   loadGoogleCalendarIds,
   loadHiddenStatuses,
   loadInteractionMode,
+  loadKnownConfigs,
   loadShowAllDayTasks,
   loadThemeMode,
+  saveConfig,
   saveGoogleCalendarColors,
   saveGoogleCalendarIds,
   saveHiddenStatuses,
   saveInteractionMode,
+  saveKnownConfig,
   saveShowAllDayTasks,
   saveThemeMode,
   type InteractionMode,
@@ -32,10 +35,12 @@ import {
 import type {
   AppConfig,
   GoogleCalendarOption,
+  GoogleUserProfile,
   NotionProperty,
   PlannerTask,
   StatusFilterOption,
   TaskInput,
+  UserSettings,
 } from "@/lib/types";
 
 type ModalState =
@@ -55,6 +60,14 @@ type AuthStatus = "checking" | "authenticated" | "guest";
 type GoogleSessionState = {
   configured: boolean;
   connected: boolean;
+  user?: GoogleUserProfile | null;
+};
+
+type SettingsSyncState = {
+  configured: boolean;
+  loaded: boolean;
+  saving: boolean;
+  user?: GoogleUserProfile | null;
 };
 
 type TaskHistoryAction =
@@ -99,6 +112,27 @@ function calendarDefaultColor(calendar: GoogleCalendarOption) {
     : FALLBACK_GOOGLE_COLOR;
 }
 
+function configIdentity(config: AppConfig) {
+  return config.dataSourceId ?? config.targetId;
+}
+
+function uniqueConfigs(configs: AppConfig[]) {
+  const seen = new Set<string>();
+  const unique: AppConfig[] = [];
+
+  for (const config of configs) {
+    const identity = configIdentity(config);
+    if (seen.has(identity)) {
+      continue;
+    }
+
+    seen.add(identity);
+    unique.push(config);
+  }
+
+  return unique;
+}
+
 export function PlannerApp() {
   const [authStatus, setAuthStatus] = useState<AuthStatus>("checking");
   const [config, setConfig] = useState<AppConfig | null>(null);
@@ -126,6 +160,13 @@ export function PlannerApp() {
   const [googleSession, setGoogleSession] = useState<GoogleSessionState>({
     configured: false,
     connected: false,
+    user: null,
+  });
+  const [settingsSync, setSettingsSync] = useState<SettingsSyncState>({
+    configured: false,
+    loaded: false,
+    saving: false,
+    user: null,
   });
   const [googleCalendars, setGoogleCalendars] = useState<GoogleCalendarOption[]>(
     [],
@@ -137,6 +178,8 @@ export function PlannerApp() {
   const [googleCalendarColors, setGoogleCalendarColors] = useState<
     Record<string, string>
   >({});
+  const applyingRemoteSettingsRef = useRef(false);
+  const settingsLoadedForUserRef = useRef<string | null>(null);
 
   useEffect(() => {
     let active = true;
@@ -209,9 +252,10 @@ export function PlannerApp() {
       setGoogleSession({
         configured: Boolean(data.configured),
         connected: Boolean(data.connected),
+        user: data.user ?? null,
       });
     } catch {
-      setGoogleSession({ configured: false, connected: false });
+      setGoogleSession({ configured: false, connected: false, user: null });
     }
   }, [authStatus]);
 
@@ -242,7 +286,11 @@ export function PlannerApp() {
       }
 
       if (data.connected === false) {
-        setGoogleSession((current) => ({ ...current, connected: false }));
+        setGoogleSession((current) => ({
+          ...current,
+          connected: false,
+          user: null,
+        }));
         setGoogleCalendars([]);
         return;
       }
@@ -289,6 +337,128 @@ export function PlannerApp() {
       setGoogleCalendarsLoading(false);
     }
   }, [authStatus, googleSession.connected]);
+
+  const buildCurrentUserSettings = useCallback((): UserSettings => {
+    const notionConfigs = uniqueConfigs([
+      ...(config ? [config] : []),
+      ...loadKnownConfigs(),
+    ]);
+
+    return {
+      notionConfigs,
+      activeNotionDataSourceId: config ? configIdentity(config) : null,
+      hiddenStatuses,
+      showAllDayTasks,
+      themeMode,
+      interactionMode,
+      selectedGoogleCalendarIds,
+      googleCalendarColors,
+    };
+  }, [
+    config,
+    googleCalendarColors,
+    hiddenStatuses,
+    interactionMode,
+    selectedGoogleCalendarIds,
+    showAllDayTasks,
+    themeMode,
+  ]);
+
+  const applyUserSettings = useCallback((settings: UserSettings) => {
+    applyingRemoteSettingsRef.current = true;
+
+    const notionConfigs = uniqueConfigs(settings.notionConfigs);
+    for (const savedConfig of notionConfigs) {
+      saveKnownConfig(savedConfig);
+    }
+
+    const activeConfig =
+      notionConfigs.find(
+        (item) => configIdentity(item) === settings.activeNotionDataSourceId,
+      ) ??
+      notionConfigs[0] ??
+      null;
+
+    if (activeConfig) {
+      saveConfig(activeConfig);
+    } else {
+      clearConfig();
+    }
+
+    saveHiddenStatuses(settings.hiddenStatuses);
+    saveShowAllDayTasks(settings.showAllDayTasks);
+    saveThemeMode(settings.themeMode);
+    saveInteractionMode(settings.interactionMode);
+    saveGoogleCalendarIds(settings.selectedGoogleCalendarIds);
+    saveGoogleCalendarColors(settings.googleCalendarColors);
+
+    setConfig(activeConfig);
+    setSetupOpen(!activeConfig);
+    setHiddenStatuses(settings.hiddenStatuses);
+    setShowAllDayTasks(settings.showAllDayTasks);
+    setThemeMode(settings.themeMode);
+    setInteractionMode(settings.interactionMode);
+    setSelectedGoogleCalendarIds(settings.selectedGoogleCalendarIds);
+    setGoogleCalendarColors(settings.googleCalendarColors);
+    setUndoStack([]);
+    setRedoStack([]);
+    applyThemeMode(settings.themeMode);
+
+    window.setTimeout(() => {
+      applyingRemoteSettingsRef.current = false;
+    }, 0);
+  }, []);
+
+  const saveRemoteUserSettings = useCallback(
+    async (settings = buildCurrentUserSettings()) => {
+      if (authStatus !== "authenticated" || !googleSession.connected) {
+        return;
+      }
+
+      setSettingsSync((current) => ({ ...current, saving: true }));
+
+      try {
+        const response = await fetch("/api/user/settings", {
+          method: "PUT",
+          headers: {
+            "Content-Type": "application/json",
+          },
+          body: JSON.stringify({ settings }),
+        });
+        const data = (await response.json()) as {
+          configured?: boolean;
+          connected?: boolean;
+          saved?: boolean;
+          user?: GoogleUserProfile | null;
+          error?: string;
+        };
+
+        if (!response.ok && response.status !== 401) {
+          throw new Error(data.error ?? "ユーザー設定を保存できませんでした。");
+        }
+
+        setSettingsSync({
+          configured: Boolean(data.configured),
+          loaded: true,
+          saving: false,
+          user: data.user ?? googleSession.user ?? null,
+        });
+      } catch (settingsError) {
+        setSettingsSync((current) => ({ ...current, saving: false }));
+        setError(
+          settingsError instanceof Error
+            ? settingsError.message
+            : "ユーザー設定を保存できませんでした。",
+        );
+      }
+    },
+    [
+      authStatus,
+      buildCurrentUserSettings,
+      googleSession.connected,
+      googleSession.user,
+    ],
+  );
 
   const googleCalendarIdsForQuery = useMemo(() => {
     if (!googleSession.connected) {
@@ -393,7 +563,11 @@ export function PlannerApp() {
         }
 
         if (googleData.connected === false) {
-          setGoogleSession((current) => ({ ...current, connected: false }));
+          setGoogleSession((current) => ({
+            ...current,
+            connected: false,
+            user: null,
+          }));
           return;
         }
 
@@ -428,7 +602,126 @@ export function PlannerApp() {
     }
 
     setGoogleCalendars([]);
+    settingsLoadedForUserRef.current = null;
+    setSettingsSync({
+      configured: false,
+      loaded: false,
+      saving: false,
+      user: null,
+    });
   }, [fetchGoogleCalendars, googleSession.connected]);
+
+  useEffect(() => {
+    if (authStatus !== "authenticated" || !googleSession.connected) {
+      return;
+    }
+
+    const userKey = googleSession.user?.sub ?? "connected";
+    if (settingsLoadedForUserRef.current === userKey) {
+      return;
+    }
+
+    settingsLoadedForUserRef.current = userKey;
+    let active = true;
+
+    async function fetchUserSettings() {
+      try {
+        const response = await fetch("/api/user/settings", {
+          cache: "no-store",
+        });
+        const data = (await response.json()) as {
+          configured?: boolean;
+          connected?: boolean;
+          user?: GoogleUserProfile | null;
+          settings?: UserSettings | null;
+          error?: string;
+        };
+
+        if (!active) {
+          return;
+        }
+
+        if (!response.ok && response.status !== 401) {
+          throw new Error(data.error ?? "ユーザー設定を取得できませんでした。");
+        }
+
+        setSettingsSync({
+          configured: Boolean(data.configured),
+          loaded: true,
+          saving: false,
+          user: data.user ?? googleSession.user ?? null,
+        });
+
+        if (data.settings) {
+          applyUserSettings(data.settings);
+          return;
+        }
+
+        if (data.configured) {
+          void saveRemoteUserSettings(buildCurrentUserSettings());
+        }
+      } catch (settingsError) {
+        if (!active) {
+          return;
+        }
+
+        setSettingsSync((current) => ({
+          ...current,
+          loaded: true,
+          saving: false,
+        }));
+        setError(
+          settingsError instanceof Error
+            ? settingsError.message
+            : "ユーザー設定を取得できませんでした。",
+        );
+      }
+    }
+
+    void fetchUserSettings();
+
+    return () => {
+      active = false;
+    };
+  }, [
+    applyUserSettings,
+    authStatus,
+    buildCurrentUserSettings,
+    googleSession.connected,
+    googleSession.user,
+    saveRemoteUserSettings,
+  ]);
+
+  useEffect(() => {
+    if (
+      !settingsSync.loaded ||
+      !settingsSync.configured ||
+      !googleSession.connected ||
+      applyingRemoteSettingsRef.current
+    ) {
+      return;
+    }
+
+    const timer = window.setTimeout(() => {
+      void saveRemoteUserSettings();
+    }, 650);
+
+    return () => {
+      window.clearTimeout(timer);
+    };
+  }, [
+    config,
+    googleCalendarColors,
+    googleSession.connected,
+    hiddenStatuses,
+    interactionMode,
+    saveRemoteUserSettings,
+    selectedGoogleCalendarIds,
+    settingsSync.configured,
+    settingsSync.loaded,
+    showAllDayTasks,
+    themeMode,
+  ]);
 
   useEffect(() => {
     void fetchTasks();
@@ -615,7 +908,11 @@ export function PlannerApp() {
         throw new Error(data.error ?? "Google Calendar連携を解除できませんでした。");
       }
 
-      setGoogleSession((current) => ({ ...current, connected: false }));
+      setGoogleSession((current) => ({
+        ...current,
+        connected: false,
+        user: null,
+      }));
       setGoogleCalendars([]);
       await fetchTasks();
     } catch (disconnectError) {
@@ -875,7 +1172,8 @@ export function PlannerApp() {
     await fetch("/api/auth/logout", { method: "POST" }).catch(() => undefined);
     setTasks([]);
     setError("");
-    setGoogleSession({ configured: false, connected: false });
+    setGoogleSession({ configured: false, connected: false, user: null });
+    setSettingsSync({ configured: false, loaded: false, saving: false, user: null });
     setGoogleCalendars([]);
     setUndoStack([]);
     setRedoStack([]);

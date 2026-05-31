@@ -3,9 +3,12 @@ import { authErrorResponse, isAuthenticatedRequest } from "@/lib/auth";
 import {
   GOOGLE_STATE_COOKIE_NAME,
   GOOGLE_TOKEN_COOKIE_NAME,
+  GOOGLE_USER_COOKIE_NAME,
+  encryptedGoogleUserProfile,
   encryptedRefreshToken,
   exchangeGoogleCodeForTokens,
   expiredGoogleCookieOptions,
+  fetchGoogleUserProfile,
   googleCookieOptions,
   isValidGoogleOAuthState,
   missingGoogleConfigMessage,
@@ -78,6 +81,18 @@ export async function GET(request: NextRequest) {
       encryptedToken,
       googleCookieOptions(),
     );
+    if (token.access_token) {
+      const profile = await fetchGoogleUserProfile(token.access_token);
+      const encryptedProfile = encryptedGoogleUserProfile(profile);
+
+      if (encryptedProfile) {
+        response.cookies.set(
+          GOOGLE_USER_COOKIE_NAME,
+          encryptedProfile,
+          googleCookieOptions(),
+        );
+      }
+    }
     response.cookies.set(
       GOOGLE_STATE_COOKIE_NAME,
       "",

@@ -5,18 +5,25 @@ import {
   randomBytes,
   timingSafeEqual,
 } from "crypto";
-import type { GoogleCalendarOption, PlannerTask } from "@/lib/types";
+import type {
+  GoogleCalendarOption,
+  GoogleUserProfile,
+  PlannerTask,
+} from "@/lib/types";
 import { getAuthSecret } from "@/lib/auth";
 
 const GOOGLE_AUTH_URL = "https://accounts.google.com/o/oauth2/v2/auth";
 const GOOGLE_TOKEN_URL = "https://oauth2.googleapis.com/token";
+const GOOGLE_USERINFO_URL = "https://openidconnect.googleapis.com/v1/userinfo";
 const GOOGLE_CALENDAR_API_BASE = "https://www.googleapis.com/calendar/v3";
 const GOOGLE_CALENDAR_SCOPE = "https://www.googleapis.com/auth/calendar.readonly";
+const GOOGLE_PROFILE_SCOPE = "openid email profile";
 const GOOGLE_TOKEN_MAX_AGE_SECONDS = 60 * 60 * 24 * 180;
 const GOOGLE_STATE_MAX_AGE_SECONDS = 60 * 10;
 
 export const GOOGLE_TOKEN_COOKIE_NAME = "google_calendar_refresh";
 export const GOOGLE_STATE_COOKIE_NAME = "google_calendar_oauth_state";
+export const GOOGLE_USER_COOKIE_NAME = "google_calendar_user";
 
 type GoogleOAuthTokenResponse = {
   access_token?: string;
@@ -66,6 +73,15 @@ type GoogleCalendarListResponse = {
   error?: {
     message?: string;
   };
+};
+
+type GoogleUserInfoResponse = {
+  sub?: string;
+  email?: string;
+  name?: string;
+  picture?: string;
+  error?: string;
+  error_description?: string;
 };
 
 function parseCookie(header: string | null, name: string) {
@@ -168,6 +184,10 @@ export function isValidGoogleOAuthState(expected: string | null, actual: string 
 }
 
 export function encryptedRefreshToken(refreshToken: string) {
+  return encryptText(refreshToken);
+}
+
+function encryptText(value: string) {
   const key = encryptionKey();
   if (!key) {
     return null;
@@ -176,7 +196,7 @@ export function encryptedRefreshToken(refreshToken: string) {
   const iv = randomBytes(12);
   const cipher = createCipheriv("aes-256-gcm", key, iv);
   const encrypted = Buffer.concat([
-    cipher.update(refreshToken, "utf8"),
+    cipher.update(value, "utf8"),
     cipher.final(),
   ]);
   const tag = cipher.getAuthTag();
@@ -188,7 +208,7 @@ export function encryptedRefreshToken(refreshToken: string) {
   ].join(".");
 }
 
-export function decryptedRefreshToken(value: string | null) {
+function decryptText(value: string | null) {
   if (!value) {
     return null;
   }
@@ -219,6 +239,10 @@ export function decryptedRefreshToken(value: string | null) {
   }
 }
 
+export function decryptedRefreshToken(value: string | null) {
+  return decryptText(value);
+}
+
 export function readGoogleRefreshToken(request: Request) {
   return decryptedRefreshToken(
     parseCookie(request.headers.get("cookie"), GOOGLE_TOKEN_COOKIE_NAME),
@@ -229,12 +253,45 @@ export function readGoogleOAuthState(request: Request) {
   return parseCookie(request.headers.get("cookie"), GOOGLE_STATE_COOKIE_NAME);
 }
 
+export function encryptedGoogleUserProfile(profile: GoogleUserProfile) {
+  return encryptText(JSON.stringify(profile));
+}
+
+export function decryptedGoogleUserProfile(value: string | null) {
+  const decrypted = decryptText(value);
+  if (!decrypted) {
+    return null;
+  }
+
+  try {
+    const parsed = JSON.parse(decrypted) as Partial<GoogleUserProfile>;
+    if (!parsed.sub || typeof parsed.sub !== "string") {
+      return null;
+    }
+
+    return {
+      sub: parsed.sub,
+      email: typeof parsed.email === "string" ? parsed.email : undefined,
+      name: typeof parsed.name === "string" ? parsed.name : undefined,
+      picture: typeof parsed.picture === "string" ? parsed.picture : undefined,
+    } satisfies GoogleUserProfile;
+  } catch {
+    return null;
+  }
+}
+
+export function readGoogleUserProfile(request: Request) {
+  return decryptedGoogleUserProfile(
+    parseCookie(request.headers.get("cookie"), GOOGLE_USER_COOKIE_NAME),
+  );
+}
+
 export function buildGoogleAuthorizationUrl(request: Request, state: string) {
   const params = new URLSearchParams({
     client_id: process.env.GOOGLE_CLIENT_ID ?? "",
     redirect_uri: googleRedirectUri(request),
     response_type: "code",
-    scope: GOOGLE_CALENDAR_SCOPE,
+    scope: `${GOOGLE_PROFILE_SCOPE} ${GOOGLE_CALENDAR_SCOPE}`,
     state,
     access_type: "offline",
     prompt: "consent",
@@ -307,6 +364,47 @@ export async function refreshGoogleAccessToken(refreshToken: string) {
   }
 
   return token.access_token;
+}
+
+export async function fetchGoogleUserProfile(accessToken: string) {
+  const response = await fetch(GOOGLE_USERINFO_URL, {
+    headers: {
+      Authorization: `Bearer ${accessToken}`,
+    },
+    cache: "no-store",
+  });
+  const data = await parseGoogleResponse<GoogleUserInfoResponse>(response);
+
+  if (!data.sub) {
+    throw new Error("Googleユーザー情報を取得できませんでした。");
+  }
+
+  return {
+    sub: data.sub,
+    email: data.email,
+    name: data.name,
+    picture: data.picture,
+  } satisfies GoogleUserProfile;
+}
+
+export async function resolveGoogleUserProfile(request: Request) {
+  const cachedProfile = readGoogleUserProfile(request);
+  if (cachedProfile) {
+    return { profile: cachedProfile, encryptedProfile: null };
+  }
+
+  const refreshToken = readGoogleRefreshToken(request);
+  if (!refreshToken) {
+    return { profile: null, encryptedProfile: null };
+  }
+
+  const accessToken = await refreshGoogleAccessToken(refreshToken);
+  const profile = await fetchGoogleUserProfile(accessToken);
+
+  return {
+    profile,
+    encryptedProfile: encryptedGoogleUserProfile(profile),
+  };
 }
 
 function googleColorIdToStatusColor(colorId?: string) {
