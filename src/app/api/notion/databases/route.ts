@@ -6,7 +6,7 @@ import {
 } from "@/lib/auth";
 import { errorResponse, listDatabases } from "@/lib/notion";
 
-export async function GET(request: NextRequest) {
+async function handleDatabasesRequest(request: NextRequest) {
   try {
     if (!isAuthenticatedRequest(request)) {
       return authErrorResponse();
@@ -29,4 +29,12 @@ export async function GET(request: NextRequest) {
   } catch (error) {
     return errorResponse(error);
   }
+}
+
+export async function GET(request: NextRequest) {
+  return handleDatabasesRequest(request);
+}
+
+export async function POST(request: NextRequest) {
+  return handleDatabasesRequest(request);
 }

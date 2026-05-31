@@ -107,6 +107,7 @@ export function SetupPanel({ initialConfig, onReady }: SetupPanelProps) {
 
     try {
       const response = await fetch("/api/notion/databases", {
+        method: "POST",
         cache: "no-store",
       });
       const data = (await response.json()) as {
