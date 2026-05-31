@@ -194,10 +194,7 @@ function layoutTimedTasks(tasks: PlannerTask[]) {
 }
 
 function columnWidthFor(node: HTMLDivElement, dayCount: number) {
-  return Math.max(
-    DAY_COLUMN_WIDTH,
-    (node.scrollWidth - TIME_AXIS_WIDTH) / dayCount,
-  );
+  return Math.max(DAY_COLUMN_WIDTH, node.scrollWidth / dayCount);
 }
 
 export function WeekView({
@@ -221,11 +218,12 @@ export function WeekView({
     [anchorDate],
   );
   const bodyHeight = hours.length * HOUR_HEIGHT;
-  const tableMinWidth = TIME_AXIS_WIDTH + days.length * DAY_COLUMN_WIDTH;
-  const gridTemplateColumns = `${TIME_AXIS_WIDTH}px repeat(${days.length}, minmax(${DAY_COLUMN_WIDTH}px, 1fr))`;
+  const tableMinWidth = days.length * DAY_COLUMN_WIDTH;
+  const gridTemplateColumns = `repeat(${days.length}, minmax(${DAY_COLUMN_WIDTH}px, 1fr))`;
   const horizontalScrollRef = useRef<HTMLDivElement | null>(null);
   const gridRef = useRef<HTMLDivElement | null>(null);
   const timeScrollRef = useRef<HTMLDivElement | null>(null);
+  const fixedTimeAxisRef = useRef<HTMLDivElement | null>(null);
   const timeScrollTopRef = useRef(0);
   const initializedScrollRef = useRef(false);
   const pendingScrollAdjustmentRef = useRef(0);
@@ -252,8 +250,8 @@ export function WeekView({
       }
 
       const rect = grid.getBoundingClientRect();
-      const dayWidth = (rect.width - TIME_AXIS_WIDTH) / days.length;
-      const relativeX = clientX - rect.left - TIME_AXIS_WIDTH;
+      const dayWidth = rect.width / days.length;
+      const relativeX = clientX - rect.left;
       const dayIndex = clamp(Math.floor(relativeX / dayWidth), 0, days.length - 1);
       const relativeY = clamp(clientY - rect.top, 0, bodyHeight);
       const pointerMinute =
@@ -322,6 +320,9 @@ export function WeekView({
     const timeScroll = timeScrollRef.current;
     if (timeScroll && Math.abs(timeScroll.scrollTop - timeScrollTopRef.current) > 1) {
       timeScroll.scrollTop = timeScrollTopRef.current;
+    }
+    if (fixedTimeAxisRef.current) {
+      fixedTimeAxisRef.current.style.transform = `translate3d(0, -${timeScrollTopRef.current}px, 0)`;
     }
 
     window.requestAnimationFrame(() => {
@@ -504,6 +505,9 @@ export function WeekView({
 
   function handleTimeScroll(event: UIEvent<HTMLDivElement>) {
     timeScrollTopRef.current = event.currentTarget.scrollTop;
+    if (fixedTimeAxisRef.current) {
+      fixedTimeAxisRef.current.style.transform = `translate3d(0, -${event.currentTarget.scrollTop}px, 0)`;
+    }
   }
 
   function pointerMinuteFromY(clientY: number) {
@@ -555,18 +559,46 @@ export function WeekView({
 
   return (
     <section className="mx-auto max-w-[1500px] px-4 py-4 md:px-6">
-      <div className="overflow-hidden rounded-xl border border-[color:var(--planner-border)] bg-[color:var(--planner-surface)] shadow-planner">
+      <div className="relative overflow-hidden rounded-xl border border-[color:var(--planner-border)] bg-[color:var(--planner-surface)] shadow-planner">
+        <div
+          className="pointer-events-none absolute inset-y-0 left-0 z-40 bg-[color:var(--planner-surface)] shadow-[8px_0_16px_rgba(15,23,42,0.08)]"
+          style={{ width: TIME_AXIS_WIDTH }}
+        >
+          <div className="min-h-20 border-b border-r border-[color:var(--planner-border)] bg-[color:var(--planner-surface)]" />
+          {showAllDayTasks ? (
+            <div className="min-h-[68px] border-b border-r border-[color:var(--planner-border)] bg-[color:var(--planner-surface-muted)] px-2 py-3 text-right text-xs font-bold text-[color:var(--planner-soft)]">
+              終日
+            </div>
+          ) : null}
+          <div className="week-time-scroll overflow-hidden border-r border-[color:var(--planner-border)] bg-[color:var(--planner-surface-muted)]">
+            <div
+              ref={fixedTimeAxisRef}
+              className="will-change-transform"
+              style={{ height: bodyHeight }}
+            >
+              {hours.map((hour) => (
+                <div
+                  key={`fixed-${hour}`}
+                  className="border-b border-[color:var(--planner-border)] pr-2 pt-2 text-right text-xs font-semibold text-[color:var(--planner-soft)]"
+                  style={{ height: HOUR_HEIGHT }}
+                >
+                  {hourLabel(hour)}
+                </div>
+              ))}
+            </div>
+          </div>
+        </div>
         <div
           ref={horizontalScrollRef}
           className="planner-scroll week-horizontal-scroll overflow-x-auto"
           onScroll={handleHorizontalScroll}
+          style={{ marginLeft: TIME_AXIS_WIDTH }}
         >
           <div className="week-table" style={{ minWidth: tableMinWidth }}>
             <div
               className="grid border-b border-[color:var(--planner-border)] bg-[color:var(--planner-surface)]"
               style={{ gridTemplateColumns }}
             >
-              <div className="sticky left-0 z-30 border-r border-[color:var(--planner-border)] bg-[color:var(--planner-surface)] shadow-[6px_0_14px_rgba(15,23,42,0.05)]" />
               {days.map((day) => (
                 <div
                   key={day.toISOString()}
@@ -589,9 +621,6 @@ export function WeekView({
                 className="grid border-b border-[color:var(--planner-border)] bg-[color:var(--planner-surface-muted)]"
                 style={{ gridTemplateColumns }}
               >
-                <div className="sticky left-0 z-30 border-r border-[color:var(--planner-border)] bg-[color:var(--planner-surface-muted)] px-2 py-3 text-right text-xs font-bold text-[color:var(--planner-soft)] shadow-[6px_0_14px_rgba(15,23,42,0.05)]">
-                  終日
-                </div>
                 {days.map((day) => {
                   const allDayTasks = allDayTasksForDay(tasks, day);
                   const visibleAllDayTasks = allDayTasks.slice(0, 3);
@@ -637,18 +666,6 @@ export function WeekView({
                 className="grid"
                 style={{ minHeight: bodyHeight, gridTemplateColumns }}
               >
-                <div className="sticky left-0 z-20 border-r border-[color:var(--planner-border)] bg-[color:var(--planner-surface-muted)] shadow-[6px_0_14px_rgba(15,23,42,0.05)]">
-                  {hours.map((hour) => (
-                    <div
-                      key={hour}
-                      className="border-b border-[color:var(--planner-border)] pr-2 pt-2 text-right text-xs font-semibold text-[color:var(--planner-soft)]"
-                      style={{ height: HOUR_HEIGHT }}
-                    >
-                      {hourLabel(hour)}
-                    </div>
-                  ))}
-                </div>
-
                 {days.map((day, dayIndex) => {
                   const dayTasks = tasksForDay(tasks, day);
                   const timedTasks = dayTasks.filter((task) => !task.isAllDay);
