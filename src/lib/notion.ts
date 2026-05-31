@@ -3,6 +3,7 @@ import type {
   NotionProperty,
   NotionPropertyType,
   NotionIcon,
+  PlannerAttachment,
   PlannerTask,
   PropertyMapping,
   TaskInput,
@@ -500,6 +501,61 @@ function getTags(page: NotionPage, propertyName?: string) {
     .filter(Boolean);
 }
 
+function getExternalUrl(page: NotionPage, propertyName?: string) {
+  if (!propertyName) {
+    return "";
+  }
+
+  const value = page.properties[propertyName]?.url;
+  return typeof value === "string" ? value : "";
+}
+
+function fileNameFromUrl(url: string) {
+  try {
+    const parsed = new URL(url);
+    const lastPath = parsed.pathname.split("/").filter(Boolean).at(-1);
+    return lastPath ? decodeURIComponent(lastPath) : parsed.hostname;
+  } catch {
+    return "添付資料";
+  }
+}
+
+function getFiles(page: NotionPage, propertyName?: string): PlannerAttachment[] {
+  if (!propertyName) {
+    return [];
+  }
+
+  const value = page.properties[propertyName]?.files;
+  if (!Array.isArray(value)) {
+    return [];
+  }
+
+  return value
+    .map((file): PlannerAttachment | null => {
+      if (!file || typeof file !== "object") {
+        return null;
+      }
+
+      const item = file as {
+        name?: string;
+        type?: "external" | "file";
+        external?: { url?: string };
+        file?: { url?: string };
+      };
+      const url = item.external?.url ?? item.file?.url;
+      if (!url) {
+        return null;
+      }
+
+      return {
+        name: item.name || fileNameFromUrl(url),
+        url,
+        type: item.type,
+      };
+    })
+    .filter((file): file is PlannerAttachment => file !== null);
+}
+
 export function pageToTask(
   page: NotionPage,
   mapping: PropertyMapping,
@@ -524,6 +580,8 @@ export function pageToTask(
     memo: getMemo(page, mapping.memo),
     tags: getTags(page, mapping.tags),
     url: page.url,
+    externalUrl: getExternalUrl(page, mapping.url),
+    attachments: getFiles(page, mapping.files),
     icon: normalizeIcon(page.icon),
     status: status.status,
     statusColor,
@@ -611,6 +669,24 @@ function buildProperties(
   if (mapping.tags) {
     properties[mapping.tags] = {
       multi_select: (task.tags ?? []).map((name) => ({ name })),
+    };
+  }
+
+  if (mapping.url) {
+    properties[mapping.url] = {
+      url: task.externalUrl?.trim() || null,
+    };
+  }
+
+  if (mapping.files && task.attachments !== undefined) {
+    properties[mapping.files] = {
+      files: task.attachments
+        .filter((attachment) => attachment.url.trim())
+        .map((attachment) => ({
+          name: attachment.name || fileNameFromUrl(attachment.url),
+          type: "external",
+          external: { url: attachment.url },
+        })),
     };
   }
 

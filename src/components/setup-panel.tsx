@@ -26,6 +26,8 @@ function autoMap(properties: NotionProperty[]): PropertyMapping {
       properties.find((property) => property.type === "select")?.name,
     memo: properties.find((property) => property.type === "rich_text")?.name,
     tags: properties.find((property) => property.type === "multi_select")?.name,
+    url: properties.find((property) => property.type === "url")?.name,
+    files: properties.find((property) => property.type === "files")?.name,
   };
 }
 
@@ -58,6 +60,8 @@ export function SetupPanel({ initialConfig, onReady }: SetupPanelProps) {
       status: undefined,
       memo: undefined,
       tags: undefined,
+      url: undefined,
+      files: undefined,
     },
   );
   const [loading, setLoading] = useState(false);
@@ -86,6 +90,14 @@ export function SetupPanel({ initialConfig, onReady }: SetupPanelProps) {
   );
   const tagProperties = useMemo(
     () => propertyOptions(schema?.properties ?? [], ["multi_select"]),
+    [schema],
+  );
+  const urlProperties = useMemo(
+    () => propertyOptions(schema?.properties ?? [], ["url"]),
+    [schema],
+  );
+  const fileProperties = useMemo(
+    () => propertyOptions(schema?.properties ?? [], ["files"]),
     [schema],
   );
 
@@ -144,6 +156,8 @@ export function SetupPanel({ initialConfig, onReady }: SetupPanelProps) {
       status: undefined,
       memo: undefined,
       tags: undefined,
+      url: undefined,
+      files: undefined,
     });
     setError("");
   }
@@ -171,6 +185,8 @@ export function SetupPanel({ initialConfig, onReady }: SetupPanelProps) {
           status: current.status || next.status,
           memo: current.memo || next.memo,
           tags: current.tags || next.tags,
+          url: current.url || next.url,
+          files: current.files || next.files,
         };
       });
     } catch (connectError) {
@@ -239,7 +255,7 @@ export function SetupPanel({ initialConfig, onReady }: SetupPanelProps) {
   }
 
   return (
-    <main className="mx-auto flex min-h-dvh w-full max-w-5xl items-center px-5 py-6 md:px-8">
+    <main className="relative z-50 mx-auto flex min-h-dvh w-full max-w-5xl items-center bg-[color:var(--planner-bg)] px-5 py-6 md:px-8">
       <section className="w-full rounded-xl border border-[color:var(--planner-border)] bg-[color:var(--planner-surface)] p-5 shadow-planner md:p-8">
         <div className="mb-7 flex flex-col gap-3 md:flex-row md:items-end md:justify-between">
           <div>
@@ -376,32 +392,58 @@ export function SetupPanel({ initialConfig, onReady }: SetupPanelProps) {
               value={mapping.title}
               options={titleProperties}
               required
-              onChange={(value) => setMapping((current) => ({ ...current, title: value ?? "" }))}
+              onChange={(value) =>
+                setMapping((current) => ({ ...current, title: value ?? "" }))
+              }
             />
             <MappingSelect
               label="日付"
               value={mapping.date}
               options={dateProperties}
               required
-              onChange={(value) => setMapping((current) => ({ ...current, date: value ?? "" }))}
+              onChange={(value) =>
+                setMapping((current) => ({ ...current, date: value ?? "" }))
+              }
             />
             <MappingSelect
               label="ステータス"
               value={mapping.status}
               options={statusProperties}
-              onChange={(value) => setMapping((current) => ({ ...current, status: value }))}
+              onChange={(value) =>
+                setMapping((current) => ({ ...current, status: value }))
+              }
             />
             <MappingSelect
               label="メモ"
               value={mapping.memo}
               options={memoProperties}
-              onChange={(value) => setMapping((current) => ({ ...current, memo: value }))}
+              onChange={(value) =>
+                setMapping((current) => ({ ...current, memo: value }))
+              }
             />
             <MappingSelect
               label="タグ"
               value={mapping.tags}
               options={tagProperties}
-              onChange={(value) => setMapping((current) => ({ ...current, tags: value }))}
+              onChange={(value) =>
+                setMapping((current) => ({ ...current, tags: value }))
+              }
+            />
+            <MappingSelect
+              label="URL"
+              value={mapping.url}
+              options={urlProperties}
+              onChange={(value) =>
+                setMapping((current) => ({ ...current, url: value }))
+              }
+            />
+            <MappingSelect
+              label="添付資料"
+              value={mapping.files}
+              options={fileProperties}
+              onChange={(value) =>
+                setMapping((current) => ({ ...current, files: value }))
+              }
             />
           </div>
         ) : null}

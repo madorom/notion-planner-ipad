@@ -1,11 +1,15 @@
 "use client";
 
 import { FormEvent, useMemo, useState } from "react";
-import { ExternalLink, LoaderCircle, Save, X } from "lucide-react";
 import {
-  datetimeLocalValue,
-  localInputToIso,
-} from "@/lib/calendar";
+  ExternalLink,
+  Link,
+  LoaderCircle,
+  Paperclip,
+  Save,
+  X,
+} from "lucide-react";
+import { datetimeLocalValue, localInputToIso } from "@/lib/calendar";
 import type {
   AppConfig,
   NotionOption,
@@ -53,6 +57,8 @@ function initialFromState(state: ModalState) {
       status: "",
       memo: "",
       tags: "",
+      externalUrl: "",
+      attachments: "",
     };
   }
 
@@ -63,6 +69,8 @@ function initialFromState(state: ModalState) {
     status: state.task.status ?? "",
     memo: state.task.memo ?? "",
     tags: state.task.tags.join(", "),
+    externalUrl: state.task.externalUrl ?? "",
+    attachments: attachmentInputValue(state.task.attachments),
   };
 }
 
@@ -70,6 +78,46 @@ function extractUrls(value: string) {
   return Array.from(value.matchAll(/https?:\/\/[^\s]+/g), (match) =>
     match[0].replace(/[),.。]+$/, ""),
   );
+}
+
+function attachmentNameFromUrl(url: string) {
+  try {
+    const parsed = new URL(url);
+    return (
+      decodeURIComponent(parsed.pathname.split("/").filter(Boolean).at(-1) ?? "") ||
+      parsed.hostname ||
+      "添付資料"
+    );
+  } catch {
+    return "添付資料";
+  }
+}
+
+function isHttpUrl(value: string) {
+  try {
+    const url = new URL(value);
+    return url.protocol === "http:" || url.protocol === "https:";
+  } catch {
+    return false;
+  }
+}
+
+function attachmentInputValue(
+  attachments: PlannerTask["attachments"] | undefined,
+) {
+  return attachments?.map((attachment) => attachment.url).join("\n") ?? "";
+}
+
+function parseAttachmentInput(value: string) {
+  return value
+    .split(/\r?\n/)
+    .map((line) => line.trim())
+    .filter(Boolean)
+    .map((url) => ({
+      name: attachmentNameFromUrl(url),
+      url,
+      type: "external" as const,
+    }));
 }
 
 function NotionIcon({ task }: { task?: PlannerTask }) {
@@ -102,6 +150,8 @@ export function taskPropertyTypes(config: AppConfig) {
     status: findProperty(config, mapping.status)?.type,
     memo: findProperty(config, mapping.memo)?.type,
     tags: findProperty(config, mapping.tags)?.type,
+    url: findProperty(config, mapping.url)?.type,
+    files: findProperty(config, mapping.files)?.type,
   } satisfies Partial<Record<keyof typeof mapping, NotionPropertyType>>;
 }
 
@@ -113,7 +163,8 @@ export function TaskModal({
   onClose,
   onSave,
 }: TaskModalProps) {
-  const [form, setForm] = useState(initialFromState(state));
+  const initialForm = useMemo(() => initialFromState(state), [state]);
+  const [form, setForm] = useState(initialForm);
   const [error, setError] = useState("");
 
   const statusProperty = useMemo(
@@ -123,9 +174,16 @@ export function TaskModal({
   const statusOptions = optionNames(statusProperty?.options);
   const hasMemo = Boolean(config.mapping.memo);
   const hasTags = Boolean(config.mapping.tags);
+  const hasUrl = Boolean(config.mapping.url);
+  const hasFiles = Boolean(config.mapping.files);
   const existingTask = state.mode === "edit" ? state.task : undefined;
   const isSidePanel = state.mode === "edit";
   const memoUrls = extractUrls(form.memo);
+  const externalUrl = form.externalUrl.trim();
+  const attachmentLinks =
+    readOnly && existingTask?.attachments
+      ? existingTask.attachments
+      : parseAttachmentInput(form.attachments);
 
   async function submit(event: FormEvent<HTMLFormElement>) {
     event.preventDefault();
@@ -150,6 +208,28 @@ export function TaskModal({
       return;
     }
 
+    if (hasUrl && externalUrl && !isHttpUrl(externalUrl)) {
+      setError("URLはhttps://またはhttp://から入力してください。");
+      return;
+    }
+
+    const attachmentsChanged =
+      form.attachments.trim() !== initialForm.attachments.trim();
+    const shouldSendAttachments =
+      hasFiles &&
+      (state.mode === "create"
+        ? Boolean(form.attachments.trim())
+        : attachmentsChanged);
+    const attachments = parseAttachmentInput(form.attachments);
+
+    if (
+      shouldSendAttachments &&
+      attachments.some((attachment) => !isHttpUrl(attachment.url))
+    ) {
+      setError("添付資料URLはhttps://またはhttp://から入力してください。");
+      return;
+    }
+
     await onSave(
       {
         title: form.title.trim(),
@@ -161,6 +241,8 @@ export function TaskModal({
           .split(",")
           .map((tag) => tag.trim())
           .filter(Boolean),
+        externalUrl: hasUrl ? externalUrl : undefined,
+        attachments: shouldSendAttachments ? attachments : undefined,
       },
       existingTask,
     );
@@ -194,20 +276,20 @@ export function TaskModal({
           <div className="flex min-w-0 items-center gap-3">
             <NotionIcon task={existingTask} />
             <div className="min-w-0">
-            <p className="text-sm font-bold text-mint-600">
-              {state.mode === "create"
-                ? "新規タスク"
-                : readOnly
-                  ? "タスク詳細"
-                  : "タスク編集"}
-            </p>
-            <h2 className="text-2xl font-bold">
-              {state.mode === "create"
-                ? "予定を追加"
-                : readOnly
-                  ? "内容を確認"
-                  : "予定を更新"}
-            </h2>
+              <p className="text-sm font-bold text-mint-600">
+                {state.mode === "create"
+                  ? "新規タスク"
+                  : readOnly
+                    ? "タスク詳細"
+                    : "タスク編集"}
+              </p>
+              <h2 className="text-2xl font-bold">
+                {state.mode === "create"
+                  ? "予定を追加"
+                  : readOnly
+                    ? "内容を確認"
+                    : "予定を更新"}
+              </h2>
             </div>
           </div>
           <IconButton label="閉じる" type="button" onClick={onClose}>
@@ -332,6 +414,84 @@ export function TaskModal({
                     >
                       <ExternalLink className="h-4 w-4" />
                       <span className="truncate">{url}</span>
+                    </a>
+                  ))}
+                </div>
+              ) : null}
+            </label>
+          ) : null}
+
+          {hasUrl ? (
+            <label className="grid gap-2">
+              <span className="text-sm font-semibold text-[color:var(--planner-soft)]">
+                URL
+              </span>
+              <div className="relative">
+                <Link className="pointer-events-none absolute left-4 top-1/2 h-5 w-5 -translate-y-1/2 text-[color:var(--planner-soft)]" />
+                <input
+                  type="url"
+                  value={form.externalUrl}
+                  readOnly={readOnly}
+                  onChange={(event) =>
+                    setForm((current) => ({
+                      ...current,
+                      externalUrl: event.target.value,
+                    }))
+                  }
+                  className={cx(
+                    "min-h-12 w-full rounded-lg border border-[color:var(--planner-border)] bg-[color:var(--planner-surface)] py-3 pl-12 pr-4 text-base outline-none transition focus:border-mint-500",
+                    readOnly &&
+                      "cursor-default bg-[color:var(--planner-surface-muted)]",
+                  )}
+                />
+              </div>
+              {readOnly && externalUrl ? (
+                <a
+                  href={externalUrl}
+                  target="_blank"
+                  rel="noreferrer"
+                  className="inline-flex min-h-9 items-center gap-2 rounded-lg border border-[color:var(--planner-border)] px-3 text-sm font-bold text-mint-600"
+                >
+                  <ExternalLink className="h-4 w-4" />
+                  <span className="truncate">{externalUrl}</span>
+                </a>
+              ) : null}
+            </label>
+          ) : null}
+
+          {hasFiles ? (
+            <label className="grid gap-2">
+              <span className="text-sm font-semibold text-[color:var(--planner-soft)]">
+                添付資料
+              </span>
+              <textarea
+                value={form.attachments}
+                readOnly={readOnly}
+                onChange={(event) =>
+                  setForm((current) => ({
+                    ...current,
+                    attachments: event.target.value,
+                  }))
+                }
+                rows={3}
+                className={cx(
+                  "rounded-lg border border-[color:var(--planner-border)] bg-[color:var(--planner-surface)] px-4 py-3 text-base outline-none transition focus:border-mint-500",
+                  readOnly &&
+                    "cursor-default bg-[color:var(--planner-surface-muted)]",
+                )}
+              />
+              {attachmentLinks.length > 0 ? (
+                <div className="grid gap-1">
+                  {attachmentLinks.map((attachment) => (
+                    <a
+                      key={`${attachment.name}-${attachment.url}`}
+                      href={attachment.url}
+                      target="_blank"
+                      rel="noreferrer"
+                      className="inline-flex min-h-9 items-center gap-2 rounded-lg border border-[color:var(--planner-border)] px-3 text-sm font-bold text-mint-600"
+                    >
+                      <Paperclip className="h-4 w-4" />
+                      <span className="truncate">{attachment.name}</span>
                     </a>
                   ))}
                 </div>

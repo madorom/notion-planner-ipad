@@ -8,6 +8,7 @@ export type NotionPropertyType =
   | "checkbox"
   | "number"
   | "url"
+  | "files"
   | "email"
   | "phone_number"
   | "people"
@@ -33,6 +34,8 @@ export type PropertyMapping = {
   status?: string;
   memo?: string;
   tags?: string;
+  url?: string;
+  files?: string;
 };
 
 export type AppConfig = {
@@ -71,7 +74,15 @@ export type PlannerTask = {
   memo?: string;
   tags: string[];
   url?: string;
+  externalUrl?: string;
+  attachments?: PlannerAttachment[];
   icon?: NotionIcon;
+};
+
+export type PlannerAttachment = {
+  name: string;
+  url: string;
+  type?: "external" | "file";
 };
 
 export type GoogleCalendarOption = {
@@ -101,6 +112,8 @@ export type TaskInput = {
   status?: string;
   memo?: string;
   tags?: string[];
+  externalUrl?: string;
+  attachments?: PlannerAttachment[];
 };
 
 export type SchemaResponse = {

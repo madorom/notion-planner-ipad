@@ -558,10 +558,10 @@ export function WeekView({
   }
 
   return (
-    <section className="mx-auto max-w-[1500px] px-4 py-4 md:px-6">
+    <section className="relative isolate mx-auto max-w-[1500px] px-4 py-4 md:px-6">
       <div className="relative overflow-hidden rounded-xl border border-[color:var(--planner-border)] bg-[color:var(--planner-surface)] shadow-planner">
         <div
-          className="pointer-events-none absolute inset-y-0 left-0 z-40 bg-[color:var(--planner-surface)] shadow-[8px_0_16px_rgba(15,23,42,0.08)]"
+          className="pointer-events-none absolute inset-y-0 left-0 z-20 bg-[color:var(--planner-surface)] shadow-[8px_0_16px_rgba(15,23,42,0.08)]"
           style={{ width: TIME_AXIS_WIDTH }}
         >
           <div className="min-h-20 border-b border-r border-[color:var(--planner-border)] bg-[color:var(--planner-surface)]" />

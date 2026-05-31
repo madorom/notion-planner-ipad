@@ -116,6 +116,8 @@ function sanitizeMapping(value: unknown): PropertyMapping | null {
     status: typeof value.status === "string" ? value.status : undefined,
     memo: typeof value.memo === "string" ? value.memo : undefined,
     tags: typeof value.tags === "string" ? value.tags : undefined,
+    url: typeof value.url === "string" ? value.url : undefined,
+    files: typeof value.files === "string" ? value.files : undefined,
   };
 }
 

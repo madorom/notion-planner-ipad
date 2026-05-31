@@ -621,6 +621,12 @@ export function PlannerApp() {
           if (sourceConfig.mapping.tags) {
             params.set("tagsProperty", sourceConfig.mapping.tags);
           }
+          if (sourceConfig.mapping.url) {
+            params.set("urlProperty", sourceConfig.mapping.url);
+          }
+          if (sourceConfig.mapping.files) {
+            params.set("filesProperty", sourceConfig.mapping.files);
+          }
 
           const response = await fetch(`/api/notion/tasks?${params.toString()}`);
           const data = (await response.json()) as {
@@ -1091,6 +1097,8 @@ export function PlannerApp() {
       status: task.status,
       memo: task.memo,
       tags: task.tags,
+      externalUrl: task.externalUrl,
+      attachments: task.attachments,
     };
   }
 
