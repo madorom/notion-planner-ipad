@@ -113,6 +113,18 @@ button {
   background-size: 100% 72px;
 }
 
+:root[data-theme="light"] .calendar-gesture-layer,
+:root[data-theme="light"] .week-table {
+  --planner-ink: #000000;
+  --planner-soft: #000000;
+  color: #000000;
+}
+
+:root[data-theme="light"] .calendar-gesture-layer [data-task-card] *,
+:root[data-theme="light"] .week-table [data-task-card] * {
+  color: #000000;
+}
+
 .calendar-slide-layer,
 .week-slide-layer {
   --calendar-slide-from: 24px;
