@@ -31,10 +31,6 @@ function autoMap(properties: NotionProperty[]): PropertyMapping {
   };
 }
 
-function propertyOptions(properties: NotionProperty[], types: string[]) {
-  return properties.filter((property) => types.includes(property.type));
-}
-
 export function SetupPanel({ initialConfig, onReady }: SetupPanelProps) {
   const [targetId, setTargetId] = useState(
     initialConfig?.dataSourceId ?? initialConfig?.targetId ?? "",
@@ -72,34 +68,7 @@ export function SetupPanel({ initialConfig, onReady }: SetupPanelProps) {
     setKnownConfigs(loadKnownConfigs());
   }, []);
 
-  const titleProperties = useMemo(
-    () => propertyOptions(schema?.properties ?? [], ["title"]),
-    [schema],
-  );
-  const dateProperties = useMemo(
-    () => propertyOptions(schema?.properties ?? [], ["date"]),
-    [schema],
-  );
-  const statusProperties = useMemo(
-    () => propertyOptions(schema?.properties ?? [], ["status", "select"]),
-    [schema],
-  );
-  const memoProperties = useMemo(
-    () => propertyOptions(schema?.properties ?? [], ["rich_text"]),
-    [schema],
-  );
-  const tagProperties = useMemo(
-    () => propertyOptions(schema?.properties ?? [], ["multi_select"]),
-    [schema],
-  );
-  const urlProperties = useMemo(
-    () => propertyOptions(schema?.properties ?? [], ["url"]),
-    [schema],
-  );
-  const fileProperties = useMemo(
-    () => propertyOptions(schema?.properties ?? [], ["files"]),
-    [schema],
-  );
+  const allProperties = useMemo(() => schema?.properties ?? [], [schema]);
 
   function applyConfig(nextConfig: AppConfig) {
     setTargetId(nextConfig.dataSourceId ?? nextConfig.targetId);
@@ -223,13 +192,15 @@ export function SetupPanel({ initialConfig, onReady }: SetupPanelProps) {
   function MappingSelect({
     label,
     value,
-    options,
+    properties,
+    supportedTypes,
     onChange,
     required,
   }: {
     label: string;
     value?: string;
-    options: NotionProperty[];
+    properties: NotionProperty[];
+    supportedTypes: string[];
     onChange: (value: string | undefined) => void;
     required?: boolean;
   }) {
@@ -244,11 +215,20 @@ export function SetupPanel({ initialConfig, onReady }: SetupPanelProps) {
           className="min-h-12 rounded-lg border border-[color:var(--planner-border)] bg-[color:var(--planner-surface)] px-4 text-base outline-none transition focus:border-mint-500"
         >
           <option value="">{required ? "選択してください" : "未使用"}</option>
-          {options.map((property) => (
-            <option key={property.id} value={property.name}>
-              {property.name}
-            </option>
-          ))}
+          {properties.map((property) => {
+            const supported = supportedTypes.includes(property.type);
+
+            return (
+              <option
+                key={property.id}
+                value={property.name}
+                disabled={!supported}
+              >
+                {property.name}
+                {supported ? "" : `（${property.type}は未対応）`}
+              </option>
+            );
+          })}
         </select>
       </label>
     );
@@ -386,65 +366,114 @@ export function SetupPanel({ initialConfig, onReady }: SetupPanelProps) {
         </div>
 
         {schema ? (
-          <div className="mt-7 grid gap-4 md:grid-cols-2">
-            <MappingSelect
-              label="タイトル"
-              value={mapping.title}
-              options={titleProperties}
-              required
-              onChange={(value) =>
-                setMapping((current) => ({ ...current, title: value ?? "" }))
-              }
-            />
-            <MappingSelect
-              label="日付"
-              value={mapping.date}
-              options={dateProperties}
-              required
-              onChange={(value) =>
-                setMapping((current) => ({ ...current, date: value ?? "" }))
-              }
-            />
-            <MappingSelect
-              label="ステータス"
-              value={mapping.status}
-              options={statusProperties}
-              onChange={(value) =>
-                setMapping((current) => ({ ...current, status: value }))
-              }
-            />
-            <MappingSelect
-              label="メモ"
-              value={mapping.memo}
-              options={memoProperties}
-              onChange={(value) =>
-                setMapping((current) => ({ ...current, memo: value }))
-              }
-            />
-            <MappingSelect
-              label="タグ"
-              value={mapping.tags}
-              options={tagProperties}
-              onChange={(value) =>
-                setMapping((current) => ({ ...current, tags: value }))
-              }
-            />
-            <MappingSelect
-              label="URL"
-              value={mapping.url}
-              options={urlProperties}
-              onChange={(value) =>
-                setMapping((current) => ({ ...current, url: value }))
-              }
-            />
-            <MappingSelect
-              label="添付資料"
-              value={mapping.files}
-              options={fileProperties}
-              onChange={(value) =>
-                setMapping((current) => ({ ...current, files: value }))
-              }
-            />
+          <div className="mt-7 grid gap-5">
+            <div className="grid gap-4 md:grid-cols-2">
+              <MappingSelect
+                label="タイトル"
+                value={mapping.title}
+                properties={allProperties}
+                supportedTypes={["title"]}
+                required
+                onChange={(value) =>
+                  setMapping((current) => ({ ...current, title: value ?? "" }))
+                }
+              />
+              <MappingSelect
+                label="日付"
+                value={mapping.date}
+                properties={allProperties}
+                supportedTypes={["date"]}
+                required
+                onChange={(value) =>
+                  setMapping((current) => ({ ...current, date: value ?? "" }))
+                }
+              />
+              <MappingSelect
+                label="ステータス"
+                value={mapping.status}
+                properties={allProperties}
+                supportedTypes={["status", "select"]}
+                onChange={(value) =>
+                  setMapping((current) => ({ ...current, status: value }))
+                }
+              />
+              <MappingSelect
+                label="メモ"
+                value={mapping.memo}
+                properties={allProperties}
+                supportedTypes={["rich_text"]}
+                onChange={(value) =>
+                  setMapping((current) => ({ ...current, memo: value }))
+                }
+              />
+              <MappingSelect
+                label="タグ"
+                value={mapping.tags}
+                properties={allProperties}
+                supportedTypes={["multi_select"]}
+                onChange={(value) =>
+                  setMapping((current) => ({ ...current, tags: value }))
+                }
+              />
+              <MappingSelect
+                label="URL"
+                value={mapping.url}
+                properties={allProperties}
+                supportedTypes={["url"]}
+                onChange={(value) =>
+                  setMapping((current) => ({ ...current, url: value }))
+                }
+              />
+              <MappingSelect
+                label="添付資料"
+                value={mapping.files}
+                properties={allProperties}
+                supportedTypes={["files"]}
+                onChange={(value) =>
+                  setMapping((current) => ({ ...current, files: value }))
+                }
+              />
+            </div>
+
+            <div className="rounded-lg border border-[color:var(--planner-border)] bg-[color:var(--planner-surface-muted)] p-3">
+              <div className="mb-3 flex items-center justify-between gap-3">
+                <p className="text-sm font-bold text-[color:var(--planner-soft)]">
+                  読み込み済みプロパティ
+                </p>
+                <span className="text-xs font-bold text-[color:var(--planner-soft)]">
+                  {allProperties.length}件
+                </span>
+              </div>
+              <div className="flex flex-wrap gap-2">
+                {allProperties.map((property) => {
+                  const supported = [
+                    "title",
+                    "date",
+                    "status",
+                    "select",
+                    "rich_text",
+                    "multi_select",
+                    "url",
+                    "files",
+                  ].includes(property.type);
+
+                  return (
+                    <span
+                      key={property.id}
+                      className={cx(
+                        "inline-flex min-h-8 items-center gap-2 rounded-lg border px-3 text-xs font-bold",
+                        supported
+                          ? "border-mint-500/30 bg-mint-500/10 text-mint-600"
+                          : "border-[color:var(--planner-border)] bg-[color:var(--planner-surface)] text-[color:var(--planner-soft)] opacity-55",
+                      )}
+                    >
+                      <span className="truncate">{property.name}</span>
+                      <span className="font-mono opacity-75">{property.type}</span>
+                    </span>
+                  );
+                })}
+              </div>
+            </div>
           </div>
         ) : null}
 

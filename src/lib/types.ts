@@ -76,6 +76,7 @@ export type PlannerTask = {
   url?: string;
   externalUrl?: string;
   attachments?: PlannerAttachment[];
+  propertySummaries?: PlannerPropertySummary[];
   icon?: NotionIcon;
 };
 
@@ -83,6 +84,13 @@ export type PlannerAttachment = {
   name: string;
   url: string;
   type?: "external" | "file";
+};
+
+export type PlannerPropertySummary = {
+  name: string;
+  type: NotionPropertyType;
+  value: string;
+  supported: boolean;
 };
 
 export type GoogleCalendarOption = {

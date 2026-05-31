@@ -37,7 +37,6 @@ type CalendarHeaderProps = {
   loading: boolean;
   themeMode: ThemeMode;
   interactionMode: InteractionMode;
-  showAllDayTasks: boolean;
   notionConfigs: AppConfig[];
   selectedNotionConfigIds: string[];
   googleConfigured: boolean;
@@ -53,7 +52,6 @@ type CalendarHeaderProps = {
   onRefresh: () => void;
   onToggleTheme: () => void;
   onInteractionModeChange: (mode: InteractionMode) => void;
-  onToggleAllDayTasks: () => void;
   onToggleNotionConfig: (configId: string) => void;
   onShowAllNotionConfigs: () => void;
   onToggleGoogleCalendar: () => void;
@@ -100,7 +98,6 @@ export function CalendarHeader({
   loading,
   themeMode,
   interactionMode,
-  showAllDayTasks,
   notionConfigs,
   selectedNotionConfigIds,
   googleConfigured,
@@ -116,7 +113,6 @@ export function CalendarHeader({
   onRefresh,
   onToggleTheme,
   onInteractionModeChange,
-  onToggleAllDayTasks,
   onToggleNotionConfig,
   onShowAllNotionConfigs,
   onToggleGoogleCalendar,
@@ -142,8 +138,7 @@ export function CalendarHeader({
     0,
     notionConfigs.length - selectedNotionConfigCount,
   );
-  const activeMenuCount =
-    activeFilterCount + hiddenNotionConfigCount + (showAllDayTasks ? 0 : 1);
+  const activeMenuCount = activeFilterCount + hiddenNotionConfigCount;
   const themeLabel =
     themeMode === "dark" ? "ホワイトモード" : "ダークモード";
   const googleLabel = !googleConfigured
@@ -285,21 +280,6 @@ export function CalendarHeader({
                       <CalendarCheck className="h-5 w-5 text-mint-600" />
                     )}
                     <span className="min-w-0 flex-1 truncate">{googleLabel}</span>
-                  </button>
-                  <button
-                    type="button"
-                    onClick={onToggleAllDayTasks}
-                    className={cx(
-                      "flex min-h-11 items-center gap-3 rounded-lg border px-3 text-left text-sm font-bold transition active:scale-[0.99]",
-                      showAllDayTasks
-                        ? "border-[color:var(--planner-border)] bg-[color:var(--planner-surface-muted)]"
-                        : "border-coral-500/40 bg-coral-500/10 text-coral-500",
-                    )}
-                  >
-                    <CalendarDays className="h-5 w-5" />
-                    <span className="min-w-0 flex-1 truncate">
-                      {showAllDayTasks ? "終日予定を表示中" : "終日予定を非表示中"}
-                    </span>
                   </button>
                   <button
                     type="button"

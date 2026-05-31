@@ -4,6 +4,7 @@ import type {
   NotionPropertyType,
   NotionIcon,
   PlannerAttachment,
+  PlannerPropertySummary,
   PlannerTask,
   PropertyMapping,
   TaskInput,
@@ -11,6 +12,16 @@ import type {
 
 const NOTION_API_BASE = "https://api.notion.com/v1";
 const NOTION_VERSION = "2026-03-11";
+const CALENDAR_SUPPORTED_PROPERTY_TYPES = new Set([
+  "title",
+  "date",
+  "select",
+  "status",
+  "rich_text",
+  "multi_select",
+  "url",
+  "files",
+]);
 
 type NotionErrorBody = {
   object?: "error";
@@ -556,6 +567,91 @@ function getFiles(page: NotionPage, propertyName?: string): PlannerAttachment[] 
     .filter((file): file is PlannerAttachment => file !== null);
 }
 
+function checkboxSummary(value: unknown) {
+  return value === true ? "はい" : value === false ? "いいえ" : "";
+}
+
+function peopleSummary(value: unknown) {
+  if (!Array.isArray(value)) {
+    return "";
+  }
+
+  return value
+    .map((person) => {
+      if (!person || typeof person !== "object") {
+        return "";
+      }
+      const item = person as { name?: string; person?: { email?: string } };
+      return item.name ?? item.person?.email ?? "";
+    })
+    .filter(Boolean)
+    .join(", ");
+}
+
+function relationSummary(value: unknown) {
+  return Array.isArray(value) ? `${value.length}件` : "";
+}
+
+function propertySummaryValue(
+  page: NotionPage,
+  property: NotionProperty,
+) {
+  const value = page.properties[property.name];
+
+  switch (property.type) {
+    case "title":
+      return getTitle(page, property.name);
+    case "date": {
+      const date = getDate(page, property.name);
+      if (!date) {
+        return "";
+      }
+      return date.end ? `${date.start} - ${date.end}` : date.start;
+    }
+    case "select":
+    case "status":
+      return getStatus(page, property.name).status ?? "";
+    case "rich_text":
+      return getMemo(page, property.name);
+    case "multi_select":
+      return getTags(page, property.name).join(", ");
+    case "url":
+      return getExternalUrl(page, property.name);
+    case "files":
+      return getFiles(page, property.name)
+        .map((file) => file.name)
+        .join(", ");
+    case "checkbox":
+      return checkboxSummary(value?.checkbox);
+    case "number":
+      return value?.number === null || value?.number === undefined
+        ? ""
+        : String(value.number);
+    case "email":
+      return typeof value?.email === "string" ? value.email : "";
+    case "phone_number":
+      return typeof value?.phone_number === "string" ? value.phone_number : "";
+    case "people":
+      return peopleSummary(value?.people);
+    case "relation":
+      return relationSummary(value?.relation);
+    default:
+      return "";
+  }
+}
+
+function getPropertySummaries(
+  page: NotionPage,
+  properties: NotionProperty[],
+): PlannerPropertySummary[] {
+  return properties.map((property) => ({
+    name: property.name,
+    type: property.type,
+    value: propertySummaryValue(page, property),
+    supported: CALENDAR_SUPPORTED_PROPERTY_TYPES.has(property.type),
+  }));
+}
+
 export function pageToTask(
   page: NotionPage,
   mapping: PropertyMapping,
@@ -582,6 +678,7 @@ export function pageToTask(
     url: page.url,
     externalUrl: getExternalUrl(page, mapping.url),
     attachments: getFiles(page, mapping.files),
+    propertySummaries: getPropertySummaries(page, properties),
     icon: normalizeIcon(page.icon),
     status: status.status,
     statusColor,

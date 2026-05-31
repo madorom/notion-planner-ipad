@@ -8,6 +8,7 @@ import { LoginPanel } from "@/components/login-panel";
 import { MonthView } from "@/components/month-view";
 import { SetupPanel } from "@/components/setup-panel";
 import { TaskModal, taskPropertyTypes } from "@/components/task-modal";
+import { TaskSummaryPopover } from "@/components/task-summary-popover";
 import { WeekView } from "@/components/week-view";
 import { getViewRange, startOfPlannerWeek } from "@/lib/calendar";
 import {
@@ -165,6 +166,7 @@ export function PlannerApp() {
   const [saving, setSaving] = useState(false);
   const [error, setError] = useState("");
   const [modal, setModal] = useState<ModalState>(null);
+  const [summaryTask, setSummaryTask] = useState<PlannerTask | null>(null);
   const [hiddenStatuses, setHiddenStatuses] = useState<string[]>([]);
   const [showAllDayTasks, setShowAllDayTasks] = useState(true);
   const [undoStack, setUndoStack] = useState<TaskHistoryAction[]>([]);
@@ -902,14 +904,20 @@ export function PlannerApp() {
     [googleCalendarColorLookup, tasks],
   );
 
-  const visibleTasks = useMemo(() => {
+  const statusVisibleTasks = useMemo(() => {
     const hiddenStatusSet = new Set(hiddenStatuses);
     return tasksWithCalendarColors.filter(
-      (task) =>
-        (showAllDayTasks || !task.isAllDay) &&
-        (!task.status || !hiddenStatusSet.has(task.status)),
+      (task) => !task.status || !hiddenStatusSet.has(task.status),
     );
-  }, [hiddenStatuses, showAllDayTasks, tasksWithCalendarColors]);
+  }, [hiddenStatuses, tasksWithCalendarColors]);
+
+  const visibleTasks = useMemo(
+    () =>
+      statusVisibleTasks.filter(
+        (task) => showAllDayTasks || !task.isAllDay,
+      ),
+    [showAllDayTasks, statusVisibleTasks],
+  );
 
   function changeDate(date: Date) {
     setCurrentDate(date);
@@ -1383,6 +1391,7 @@ export function PlannerApp() {
             return next;
           });
           setConfig(nextConfig);
+          setSummaryTask(null);
           setUndoStack([]);
           setRedoStack([]);
           setSetupOpen(false);
@@ -1399,14 +1408,16 @@ export function PlannerApp() {
       ? notionConfigLookup.get(modal.task.notionDataSourceId) ?? config
       : config;
 
-  function openTask(task: PlannerTask) {
+  function showTaskSummary(task: PlannerTask) {
+    setSummaryTask(task);
+  }
+
+  function openTaskEditor(task: PlannerTask) {
     if (task.source === "google") {
-      if (task.url) {
-        window.open(task.url, "_blank", "noopener,noreferrer");
-      }
       return;
     }
 
+    setSummaryTask(null);
     setModal({ mode: "edit", task });
   }
 
@@ -1418,7 +1429,6 @@ export function PlannerApp() {
         loading={loading}
         themeMode={themeMode}
         interactionMode={interactionMode}
-        showAllDayTasks={showAllDayTasks}
         notionConfigs={notionConfigs}
         selectedNotionConfigIds={selectedNotionConfigIds}
         googleConfigured={googleSession.configured}
@@ -1434,7 +1444,6 @@ export function PlannerApp() {
         onRefresh={fetchTasks}
         onToggleTheme={toggleThemeMode}
         onInteractionModeChange={changeInteractionMode}
-        onToggleAllDayTasks={toggleAllDayTasks}
         onToggleNotionConfig={toggleNotionConfig}
         onShowAllNotionConfigs={showAllNotionConfigs}
         onToggleGoogleCalendar={toggleGoogleCalendar}
@@ -1459,11 +1468,12 @@ export function PlannerApp() {
       {view === "week" ? (
         <WeekView
           currentDate={currentDate}
-          tasks={visibleTasks}
+          tasks={statusVisibleTasks}
           editable={editable}
           showAllDayTasks={showAllDayTasks}
+          onToggleAllDayTasks={toggleAllDayTasks}
           onCreate={(start, end) => setModal({ mode: "create", start, end })}
-          onEdit={openTask}
+          onEdit={showTaskSummary}
           onDateChange={setCurrentDate}
           onVisibleDateChange={setDisplayDate}
           onMoveTask={moveTask}
@@ -1478,7 +1488,7 @@ export function PlannerApp() {
             changeDate(start);
             setModal({ mode: "create", start, end });
           }}
-          onEdit={openTask}
+          onEdit={showTaskSummary}
         />
       )}
 
@@ -1535,6 +1545,15 @@ export function PlannerApp() {
           readOnly={!editable && modal.mode === "edit"}
           onClose={() => setModal(null)}
           onSave={saveTask}
+        />
+      ) : null}
+
+      {summaryTask ? (
+        <TaskSummaryPopover
+          task={summaryTask}
+          editable={editable}
+          onClose={() => setSummaryTask(null)}
+          onEdit={() => openTaskEditor(summaryTask)}
         />
       ) : null}
     </div>

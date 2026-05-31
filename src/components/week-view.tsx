@@ -13,6 +13,7 @@ import {
   startOfDay,
 } from "date-fns";
 import { ja } from "date-fns/locale";
+import { ChevronDown, ChevronRight } from "lucide-react";
 import type { PointerEvent as ReactPointerEvent, UIEvent } from "react";
 import {
   useCallback,
@@ -39,6 +40,7 @@ type WeekViewProps = {
   tasks: PlannerTask[];
   editable: boolean;
   showAllDayTasks: boolean;
+  onToggleAllDayTasks: () => void;
   onCreate: (start: Date, end: Date) => void;
   onEdit: (task: PlannerTask) => void;
   onDateChange: (date: Date) => void;
@@ -52,6 +54,8 @@ const hours = Array.from(
 );
 const TIME_AXIS_WIDTH = 72;
 const DAY_COLUMN_WIDTH = 132;
+const DATE_HEADER_HEIGHT = 84;
+const ALL_DAY_ROW_HEIGHT = 72;
 const DRAG_START_DISTANCE = 8;
 const DRAG_SNAP_MINUTES = 15;
 const CREATE_HOLD_DELAY_MS = 260;
@@ -202,6 +206,7 @@ export function WeekView({
   tasks,
   editable,
   showAllDayTasks,
+  onToggleAllDayTasks,
   onCreate,
   onEdit,
   onDateChange,
@@ -218,6 +223,10 @@ export function WeekView({
     [anchorDate],
   );
   const bodyHeight = hours.length * HOUR_HEIGHT;
+  const allDayTaskCount = useMemo(
+    () => tasks.filter((task) => task.isAllDay).length,
+    [tasks],
+  );
   const tableMinWidth = days.length * DAY_COLUMN_WIDTH;
   const gridTemplateColumns = `repeat(${days.length}, minmax(${DAY_COLUMN_WIDTH}px, 1fr))`;
   const horizontalScrollRef = useRef<HTMLDivElement | null>(null);
@@ -328,7 +337,7 @@ export function WeekView({
     window.requestAnimationFrame(() => {
       isRepositioningRef.current = false;
     });
-  }, [currentDate]);
+  }, [currentDate, showAllDayTasks]);
 
   useEffect(() => {
     function handlePointerMove(event: PointerEvent) {
@@ -564,9 +573,34 @@ export function WeekView({
           className="pointer-events-none absolute inset-y-0 left-0 z-20 bg-[color:var(--planner-surface)] shadow-[8px_0_16px_rgba(15,23,42,0.08)]"
           style={{ width: TIME_AXIS_WIDTH }}
         >
-          <div className="min-h-20 border-b border-r border-[color:var(--planner-border)] bg-[color:var(--planner-surface)]" />
+          <div
+            className="flex items-end justify-end border-b border-r border-[color:var(--planner-border)] bg-[color:var(--planner-surface)] p-2"
+            style={{ height: DATE_HEADER_HEIGHT }}
+          >
+            <button
+              type="button"
+              aria-label={showAllDayTasks ? "終日予定を隠す" : "終日予定を表示"}
+              onClick={onToggleAllDayTasks}
+              className="pointer-events-auto inline-flex min-h-9 items-center gap-1 rounded-lg border border-[color:var(--planner-border)] bg-[color:var(--planner-surface-muted)] px-2 text-xs font-bold text-[color:var(--planner-soft)] transition active:scale-[0.98]"
+            >
+              {showAllDayTasks ? (
+                <ChevronDown className="h-4 w-4" />
+              ) : (
+                <ChevronRight className="h-4 w-4" />
+              )}
+              <span>終日</span>
+              {allDayTaskCount > 0 ? (
+                <span className="rounded-full bg-[color:var(--planner-surface)] px-1.5 py-0.5 text-[10px]">
+                  {allDayTaskCount}
+                </span>
+              ) : null}
+            </button>
+          </div>
           {showAllDayTasks ? (
-            <div className="min-h-[68px] border-b border-r border-[color:var(--planner-border)] bg-[color:var(--planner-surface-muted)] px-2 py-3 text-right text-xs font-bold text-[color:var(--planner-soft)]">
+            <div
+              className="border-b border-r border-[color:var(--planner-border)] bg-[color:var(--planner-surface-muted)] px-2 py-3 text-right text-xs font-bold text-[color:var(--planner-soft)]"
+              style={{ height: ALL_DAY_ROW_HEIGHT }}
+            >
               終日
             </div>
           ) : null}
@@ -605,6 +639,7 @@ export function WeekView({
                   className={`min-h-20 border-r border-[color:var(--planner-border)] px-3 py-3 last:border-r-0 ${
                     isSameDay(day, new Date()) ? "bg-mint-500/10" : ""
                   }`}
+                  style={{ height: DATE_HEADER_HEIGHT }}
                 >
                   <div className="text-xs font-bold text-[color:var(--planner-soft)]">
                     {format(day, "EEE", { locale: ja })}
@@ -630,11 +665,15 @@ export function WeekView({
                   return (
                     <div
                       key={`all-day-${day.toISOString()}`}
-                      className={`min-h-[68px] border-r border-[color:var(--planner-border)] p-2 last:border-r-0 ${
+                      className={`border-r border-[color:var(--planner-border)] p-2 last:border-r-0 ${
                         isSameDay(day, new Date()) ? "bg-mint-500/10" : ""
                       }`}
+                      style={{ height: ALL_DAY_ROW_HEIGHT }}
                     >
-                      <div className="grid max-h-[132px] gap-1.5 overflow-y-auto pr-1 planner-scroll">
+                      <div
+                        className="grid gap-1.5 overflow-y-auto pr-1 planner-scroll"
+                        style={{ maxHeight: ALL_DAY_ROW_HEIGHT - 16 }}
+                      >
                         {visibleAllDayTasks.map((task) => (
                           <TaskCard
                             key={task.id}
