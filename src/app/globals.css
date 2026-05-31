@@ -91,7 +91,7 @@ button {
 }
 
 .week-time-scroll {
-  height: min(936px, max(320px, calc(100dvh - 204px)));
+  height: min(936px, max(300px, calc(100dvh - 276px)));
   overscroll-behavior: contain;
 }
 
@@ -102,7 +102,7 @@ button {
 
 @media (min-width: 768px) {
   .week-time-scroll {
-    height: min(936px, max(360px, calc(100dvh - 188px)));
+    height: min(936px, max(340px, calc(100dvh - 260px)));
   }
 }
 

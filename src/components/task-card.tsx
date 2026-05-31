@@ -110,6 +110,27 @@ function statusTheme(statusColor?: string) {
   return statusThemes[statusColor as keyof typeof statusThemes];
 }
 
+function hexToRgb(hex?: string) {
+  if (!hex || !/^#[0-9a-f]{6}$/i.test(hex)) {
+    return null;
+  }
+
+  return {
+    r: parseInt(hex.slice(1, 3), 16),
+    g: parseInt(hex.slice(3, 5), 16),
+    b: parseInt(hex.slice(5, 7), 16),
+  };
+}
+
+function rgba(hex: string, alpha: number) {
+  const rgb = hexToRgb(hex);
+  if (!rgb) {
+    return undefined;
+  }
+
+  return `rgba(${rgb.r}, ${rgb.g}, ${rgb.b}, ${alpha})`;
+}
+
 export function TaskCard({
   task,
   compact,
@@ -126,6 +147,7 @@ export function TaskCard({
     cancelled: boolean;
   } | null>(null);
   const theme = statusTheme(task.statusColor);
+  const customColor = hexToRgb(task.colorHex) ? task.colorHex : undefined;
   const timeLabel = task.isAllDay
     ? "終日"
     : `${format(parseISO(task.start), "HH:mm")}${
@@ -171,6 +193,13 @@ export function TaskCard({
       type="button"
       data-task-card
       style={{
+        ...(customColor
+          ? {
+              backgroundColor: rgba(customColor, 0.13),
+              borderColor: rgba(customColor, 0.38),
+              borderLeftColor: customColor,
+            }
+          : {}),
         ...style,
         touchAction: onPointerDown ? "none" : style?.touchAction,
       }}
@@ -220,7 +249,7 @@ export function TaskCard({
       }}
       className={cx(
         "w-full overflow-hidden rounded-lg border border-l-4 text-left shadow-sm transition hover:-translate-y-0.5 hover:shadow-planner-soft active:scale-[0.99]",
-        theme.card,
+        customColor ? "bg-[color:var(--planner-surface)]" : theme.card,
         onPointerDown && "cursor-grab active:cursor-grabbing",
         isDragging && "opacity-35 ring-2 ring-mint-500/40",
         compact ? "px-2 py-1.5" : "px-3 py-2.5",
@@ -229,7 +258,7 @@ export function TaskCard({
       <div
         className={cx(
           "line-clamp-2 font-bold leading-snug",
-          theme.title,
+          customColor ? "text-[color:var(--planner-ink)]" : theme.title,
           compact ? "text-xs" : "text-sm",
         )}
       >
@@ -238,7 +267,7 @@ export function TaskCard({
       <div
         className={cx(
           "mt-1 flex items-center gap-1.5",
-          theme.meta,
+          customColor ? "text-[color:var(--planner-soft)]" : theme.meta,
           compact ? "text-[11px]" : "text-xs",
         )}
       >

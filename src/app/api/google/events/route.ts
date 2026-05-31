@@ -25,7 +25,15 @@ export async function GET(request: NextRequest) {
 
     const from = request.nextUrl.searchParams.get("from");
     const to = request.nextUrl.searchParams.get("to");
-    const calendarId = request.nextUrl.searchParams.get("calendarId") ?? "primary";
+    const calendarIds = [
+      ...request.nextUrl.searchParams.getAll("calendarId"),
+      ...(request.nextUrl.searchParams.get("calendarIds")?.split(",") ?? []),
+    ]
+      .map((calendarId) => calendarId.trim())
+      .filter(Boolean);
+    const targetCalendarIds = Array.from(
+      new Set(calendarIds.length > 0 ? calendarIds : ["primary"]),
+    );
 
     if (!from || !to) {
       return Response.json(
@@ -35,14 +43,13 @@ export async function GET(request: NextRequest) {
     }
 
     const accessToken = await refreshGoogleAccessToken(refreshToken);
-    const tasks = await queryGoogleCalendarTasks(
-      accessToken,
-      from,
-      to,
-      calendarId,
+    const tasksByCalendar = await Promise.all(
+      targetCalendarIds.map((calendarId) =>
+        queryGoogleCalendarTasks(accessToken, from, to, calendarId),
+      ),
     );
 
-    return Response.json({ tasks, connected: true });
+    return Response.json({ tasks: tasksByCalendar.flat(), connected: true });
   } catch (error) {
     return Response.json(
       {

@@ -14,10 +14,12 @@ import {
   clearConfig,
   applyThemeMode,
   loadConfig,
-  loadGoogleCalendarId,
+  loadGoogleCalendarColors,
+  loadGoogleCalendarIds,
   loadHiddenStatuses,
   loadThemeMode,
-  saveGoogleCalendarId,
+  saveGoogleCalendarColors,
+  saveGoogleCalendarIds,
   saveHiddenStatuses,
   saveThemeMode,
   type ThemeMode,
@@ -63,6 +65,7 @@ type TaskHistoryAction =
 
 const HISTORY_LIMIT = 30;
 const WEEK_PREVIEW_DAY_BUFFER = 1;
+const FALLBACK_GOOGLE_COLOR = "#4285f4";
 
 function resolveStatusProperty(config: AppConfig | null): NotionProperty | undefined {
   if (!config) {
@@ -79,6 +82,16 @@ function resolveStatusProperty(config: AppConfig | null): NotionProperty | undef
     ) ??
     config.properties.find((property) => property.type === "select")
   );
+}
+
+function isHexColor(value: string | undefined): value is string {
+  return Boolean(value && /^#[0-9a-f]{6}$/i.test(value));
+}
+
+function calendarDefaultColor(calendar: GoogleCalendarOption) {
+  return isHexColor(calendar.backgroundColor)
+    ? calendar.backgroundColor
+    : FALLBACK_GOOGLE_COLOR;
 }
 
 export function PlannerApp() {
@@ -105,8 +118,12 @@ export function PlannerApp() {
     [],
   );
   const [googleCalendarsLoading, setGoogleCalendarsLoading] = useState(false);
-  const [selectedGoogleCalendarId, setSelectedGoogleCalendarId] =
-    useState("primary");
+  const [selectedGoogleCalendarIds, setSelectedGoogleCalendarIds] = useState<
+    string[]
+  >(["primary"]);
+  const [googleCalendarColors, setGoogleCalendarColors] = useState<
+    Record<string, string>
+  >({});
 
   useEffect(() => {
     let active = true;
@@ -118,7 +135,8 @@ export function PlannerApp() {
       setSetupOpen(!stored);
       setHiddenStatuses(loadHiddenStatuses());
       setThemeMode(nextThemeMode);
-      setSelectedGoogleCalendarId(loadGoogleCalendarId() ?? "primary");
+      setSelectedGoogleCalendarIds(loadGoogleCalendarIds());
+      setGoogleCalendarColors(loadGoogleCalendarColors());
       applyThemeMode(nextThemeMode);
 
       try {
@@ -217,17 +235,34 @@ export function PlannerApp() {
       const calendars = data.calendars ?? [];
       setGoogleCalendars(calendars);
 
-      setSelectedGoogleCalendarId((current) => {
-        if (calendars.some((calendar) => calendar.id === current)) {
-          return current;
+      setGoogleCalendarColors((current) => {
+        const next = { ...current };
+        for (const calendar of calendars) {
+          if (!isHexColor(next[calendar.id])) {
+            next[calendar.id] = calendarDefaultColor(calendar);
+          }
+        }
+        saveGoogleCalendarColors(next);
+        return next;
+      });
+
+      setSelectedGoogleCalendarIds((current) => {
+        const availableIds = new Set(calendars.map((calendar) => calendar.id));
+        const validSelected = current.filter((calendarId) =>
+          availableIds.has(calendarId),
+        );
+
+        if (validSelected.length > 0) {
+          saveGoogleCalendarIds(validSelected);
+          return validSelected;
         }
 
         const fallback =
           calendars.find((calendar) => calendar.primary)?.id ??
           calendars[0]?.id ??
           "primary";
-        saveGoogleCalendarId(fallback);
-        return fallback;
+        saveGoogleCalendarIds([fallback]);
+        return [fallback];
       });
     } catch (calendarError) {
       setError(
@@ -240,29 +275,42 @@ export function PlannerApp() {
     }
   }, [authStatus, googleSession.connected]);
 
-  const googleCalendarIdForQuery = useMemo(() => {
+  const googleCalendarIdsForQuery = useMemo(() => {
     if (!googleSession.connected) {
-      return "primary";
+      return [];
     }
 
     if (googleCalendars.length === 0) {
-      return "primary";
+      return selectedGoogleCalendarIds.length > 0
+        ? selectedGoogleCalendarIds
+        : ["primary"];
     }
 
-    if (
-      googleCalendars.some(
-        (calendar) => calendar.id === selectedGoogleCalendarId,
-      )
-    ) {
-      return selectedGoogleCalendarId;
+    const availableIds = new Set(googleCalendars.map((calendar) => calendar.id));
+    const validSelected = selectedGoogleCalendarIds.filter((calendarId) =>
+      availableIds.has(calendarId),
+    );
+
+    if (validSelected.length > 0) {
+      return validSelected;
     }
 
-    return (
+    const fallback =
       googleCalendars.find((calendar) => calendar.primary)?.id ??
       googleCalendars[0]?.id ??
-      "primary"
-    );
-  }, [googleCalendars, googleSession.connected, selectedGoogleCalendarId]);
+      "primary";
+
+    return [fallback];
+  }, [googleCalendars, googleSession.connected, selectedGoogleCalendarIds]);
+
+  const googleCalendarColorLookup = useMemo(() => {
+    const lookup: Record<string, string> = {};
+    for (const calendar of googleCalendars) {
+      lookup[calendar.id] =
+        googleCalendarColors[calendar.id] ?? calendarDefaultColor(calendar);
+    }
+    return lookup;
+  }, [googleCalendarColors, googleCalendars]);
 
   const fetchTasks = useCallback(async () => {
     if (!config || authStatus !== "authenticated") {
@@ -306,12 +354,14 @@ export function PlannerApp() {
 
       setTasks(data.tasks ?? []);
 
-      if (googleSession.connected) {
+      if (googleSession.connected && googleCalendarIdsForQuery.length > 0) {
         const googleParams = new URLSearchParams({
           from: range.start.toISOString(),
           to: range.end.toISOString(),
         });
-        googleParams.set("calendarId", googleCalendarIdForQuery);
+        for (const calendarId of googleCalendarIdsForQuery) {
+          googleParams.append("calendarId", calendarId);
+        }
         const googleResponse = await fetch(
           `/api/google/events?${googleParams.toString()}`,
         );
@@ -346,7 +396,7 @@ export function PlannerApp() {
   }, [
     authStatus,
     config,
-    googleCalendarIdForQuery,
+    googleCalendarIdsForQuery,
     googleSession.connected,
     range.end,
     range.start,
@@ -405,10 +455,30 @@ export function PlannerApp() {
     });
   }, [config, tasks]);
 
+  const tasksWithCalendarColors = useMemo(
+    () =>
+      tasks.map((task) => {
+        if (task.source !== "google" || !task.googleCalendarId) {
+          return task;
+        }
+
+        return {
+          ...task,
+          colorHex:
+            googleCalendarColorLookup[task.googleCalendarId] ??
+            task.colorHex ??
+            FALLBACK_GOOGLE_COLOR,
+        };
+      }),
+    [googleCalendarColorLookup, tasks],
+  );
+
   const visibleTasks = useMemo(() => {
     const hiddenStatusSet = new Set(hiddenStatuses);
-    return tasks.filter((task) => !task.status || !hiddenStatusSet.has(task.status));
-  }, [hiddenStatuses, tasks]);
+    return tasksWithCalendarColors.filter(
+      (task) => !task.status || !hiddenStatusSet.has(task.status),
+    );
+  }, [hiddenStatuses, tasksWithCalendarColors]);
 
   function toggleStatus(status: string) {
     setHiddenStatuses((current) => {
@@ -449,9 +519,34 @@ export function PlannerApp() {
     void disconnectGoogleCalendar();
   }
 
-  function changeGoogleCalendar(calendarId: string) {
-    setSelectedGoogleCalendarId(calendarId);
-    saveGoogleCalendarId(calendarId);
+  function toggleGoogleCalendarId(calendarId: string) {
+    setSelectedGoogleCalendarIds((current) => {
+      const next = current.includes(calendarId)
+        ? current.length > 1
+          ? current.filter((item) => item !== calendarId)
+          : current
+        : [...current, calendarId];
+      saveGoogleCalendarIds(next);
+      return next;
+    });
+  }
+
+  function changeGoogleCalendarColor(calendarId: string, color: string) {
+    if (!isHexColor(color)) {
+      return;
+    }
+
+    setGoogleCalendarColors((current) => {
+      const next = { ...current, [calendarId]: color };
+      saveGoogleCalendarColors(next);
+      return next;
+    });
+  }
+
+  function showAllGoogleCalendars() {
+    const next = googleCalendars.map((calendar) => calendar.id);
+    setSelectedGoogleCalendarIds(next);
+    saveGoogleCalendarIds(next);
   }
 
   async function disconnectGoogleCalendar() {
@@ -795,7 +890,8 @@ export function PlannerApp() {
         googleConnected={googleSession.connected}
         googleCalendars={googleCalendars}
         googleCalendarsLoading={googleCalendarsLoading}
-        selectedGoogleCalendarId={selectedGoogleCalendarId}
+        selectedGoogleCalendarIds={selectedGoogleCalendarIds}
+        googleCalendarColors={googleCalendarColors}
         statusOptions={statusOptions}
         hiddenStatuses={hiddenStatuses}
         onViewChange={setView}
@@ -803,7 +899,9 @@ export function PlannerApp() {
         onRefresh={fetchTasks}
         onToggleTheme={toggleThemeMode}
         onToggleGoogleCalendar={toggleGoogleCalendar}
-        onGoogleCalendarChange={changeGoogleCalendar}
+        onToggleGoogleCalendarId={toggleGoogleCalendarId}
+        onGoogleCalendarColorChange={changeGoogleCalendarColor}
+        onShowAllGoogleCalendars={showAllGoogleCalendars}
         onSettings={() => setSetupOpen(true)}
         onToggleStatus={toggleStatus}
         onShowAllStatuses={showAllStatuses}

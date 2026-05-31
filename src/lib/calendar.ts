@@ -82,6 +82,26 @@ export function tasksForDay(tasks: PlannerTask[], day: Date) {
     .sort((a, b) => a.start.localeCompare(b.start));
 }
 
+export function allDayTasksForDay(tasks: PlannerTask[], day: Date) {
+  const targetDay = startOfDay(day);
+
+  return tasks
+    .filter((task) => {
+      if (!task.isAllDay) {
+        return false;
+      }
+
+      const start = startOfDay(parseISO(task.start));
+      if (!task.end || task.source !== "google") {
+        return isSameDay(start, targetDay);
+      }
+
+      const exclusiveEnd = startOfDay(parseISO(task.end));
+      return targetDay >= start && targetDay < exclusiveEnd;
+    })
+    .sort((a, b) => a.start.localeCompare(b.start));
+}
+
 export function taskPosition(task: PlannerTask) {
   const start = parseISO(task.start);
   const end = task.end ? parseISO(task.end) : addHours(start, 1);

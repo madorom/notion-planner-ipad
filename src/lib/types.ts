@@ -51,6 +51,9 @@ export type PlannerTask = {
   end?: string;
   isAllDay: boolean;
   source?: "notion" | "google";
+  googleCalendarId?: string;
+  googleCalendarName?: string;
+  colorHex?: string;
   status?: string;
   statusColor?: string;
   memo?: string;

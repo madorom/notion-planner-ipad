@@ -30,6 +30,7 @@ import {
   DAY_END_HOUR,
   DAY_START_HOUR,
   HOUR_HEIGHT,
+  allDayTasksForDay,
   getWeekDays,
   hourLabel,
   tasksForDay,
@@ -529,6 +530,43 @@ export function WeekView({
               ))}
             </div>
 
+            <div className="grid grid-cols-[72px_repeat(7,minmax(128px,1fr))] border-b border-[color:var(--planner-border)] bg-[color:var(--planner-surface-muted)]">
+              <div className="border-r border-[color:var(--planner-border)] px-2 py-3 text-right text-xs font-bold text-[color:var(--planner-soft)]">
+                終日
+              </div>
+              {page.days.map((day) => {
+                const allDayTasks = allDayTasksForDay(tasks, day);
+                const visibleAllDayTasks = allDayTasks.slice(0, 3);
+                const hiddenAllDayCount =
+                  allDayTasks.length - visibleAllDayTasks.length;
+
+                return (
+                  <div
+                    key={`all-day-${day.toISOString()}`}
+                    className={`min-h-[68px] border-r border-[color:var(--planner-border)] p-2 last:border-r-0 ${
+                      isSameDay(day, new Date()) ? "bg-mint-500/10" : ""
+                    }`}
+                  >
+                    <div className="grid max-h-[132px] gap-1.5 overflow-y-auto pr-1 planner-scroll">
+                      {visibleAllDayTasks.map((task) => (
+                        <TaskCard
+                          key={task.id}
+                          task={task}
+                          compact
+                          onClick={handleTaskClick}
+                        />
+                      ))}
+                      {hiddenAllDayCount > 0 ? (
+                        <div className="rounded-md bg-[color:var(--planner-surface)] px-2 py-1 text-xs font-bold text-[color:var(--planner-soft)]">
+                          +{hiddenAllDayCount}件
+                        </div>
+                      ) : null}
+                    </div>
+                  </div>
+                );
+              })}
+            </div>
+
             <div
               ref={(node) => setTimeScrollNode(pageIndex, node)}
               className="planner-scroll week-time-scroll overflow-y-auto overflow-x-hidden"
@@ -556,7 +594,6 @@ export function WeekView({
                   const dayTasks = tasksForDay(tasks, day);
                   const timedTasks = dayTasks.filter((task) => !task.isAllDay);
                   const laidOutTasks = layoutTimedTasks(timedTasks);
-                  const allDayTasks = dayTasks.filter((task) => task.isAllDay);
 
                   return (
                     <div
@@ -569,19 +606,6 @@ export function WeekView({
                           : undefined
                       }
                     >
-                      {allDayTasks.length > 0 ? (
-                        <div className="absolute left-2 right-2 top-2 z-20 grid gap-1">
-                          {allDayTasks.slice(0, 2).map((task) => (
-                            <TaskCard
-                              key={task.id}
-                              task={task}
-                              compact
-                              onClick={handleTaskClick}
-                            />
-                          ))}
-                        </div>
-                      ) : null}
-
                       {isCurrentPage && dragPreview?.dayIndex === dayIndex ? (
                         <div
                           className="pointer-events-none absolute left-1.5 right-1.5 z-30 rounded-lg border-2 border-dashed border-mint-500 bg-mint-500/15 px-2 py-1 text-xs font-bold text-mint-600 shadow-planner-soft dark:text-mint-500"

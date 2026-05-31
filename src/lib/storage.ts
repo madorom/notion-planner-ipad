@@ -4,6 +4,9 @@ const CONFIG_KEY = "notion-planner-ipad:v1";
 const HIDDEN_STATUSES_KEY = "notion-planner-ipad:hidden-statuses:v1";
 const THEME_MODE_KEY = "notion-planner-ipad:theme:v1";
 const GOOGLE_CALENDAR_ID_KEY = "notion-planner-ipad:google-calendar-id:v1";
+const GOOGLE_CALENDAR_IDS_KEY = "notion-planner-ipad:google-calendar-ids:v1";
+const GOOGLE_CALENDAR_COLORS_KEY =
+  "notion-planner-ipad:google-calendar-colors:v1";
 
 export type ThemeMode = "light" | "dark";
 
@@ -101,4 +104,72 @@ export function loadGoogleCalendarId() {
 
 export function saveGoogleCalendarId(calendarId: string) {
   window.localStorage.setItem(GOOGLE_CALENDAR_ID_KEY, calendarId);
+}
+
+export function loadGoogleCalendarIds() {
+  if (typeof window === "undefined") {
+    return [];
+  }
+
+  const raw = window.localStorage.getItem(GOOGLE_CALENDAR_IDS_KEY);
+  if (raw) {
+    try {
+      const parsed = JSON.parse(raw);
+      return Array.isArray(parsed)
+        ? parsed.filter((value): value is string => typeof value === "string")
+        : [];
+    } catch {
+      window.localStorage.removeItem(GOOGLE_CALENDAR_IDS_KEY);
+    }
+  }
+
+  const legacyCalendarId = loadGoogleCalendarId();
+  return legacyCalendarId ? [legacyCalendarId] : [];
+}
+
+export function saveGoogleCalendarIds(calendarIds: string[]) {
+  window.localStorage.setItem(
+    GOOGLE_CALENDAR_IDS_KEY,
+    JSON.stringify(calendarIds),
+  );
+  if (calendarIds[0]) {
+    saveGoogleCalendarId(calendarIds[0]);
+  }
+}
+
+export function loadGoogleCalendarColors() {
+  if (typeof window === "undefined") {
+    return {};
+  }
+
+  const raw = window.localStorage.getItem(GOOGLE_CALENDAR_COLORS_KEY);
+  if (!raw) {
+    return {};
+  }
+
+  try {
+    const parsed = JSON.parse(raw);
+    if (!parsed || typeof parsed !== "object" || Array.isArray(parsed)) {
+      return {};
+    }
+
+    return Object.fromEntries(
+      Object.entries(parsed).filter(
+        (entry): entry is [string, string] =>
+          typeof entry[0] === "string" &&
+          typeof entry[1] === "string" &&
+          /^#[0-9a-f]{6}$/i.test(entry[1]),
+      ),
+    );
+  } catch {
+    window.localStorage.removeItem(GOOGLE_CALENDAR_COLORS_KEY);
+    return {};
+  }
+}
+
+export function saveGoogleCalendarColors(colors: Record<string, string>) {
+  window.localStorage.setItem(
+    GOOGLE_CALENDAR_COLORS_KEY,
+    JSON.stringify(colors),
+  );
 }

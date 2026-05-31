@@ -336,7 +336,11 @@ function googleColorIdToStatusColor(colorId?: string) {
   }
 }
 
-function googleEventToTask(event: GoogleCalendarEvent): PlannerTask | null {
+function googleEventToTask(
+  event: GoogleCalendarEvent,
+  calendarId: string,
+  calendarName?: string,
+): PlannerTask | null {
   if (event.status === "cancelled" || !event.id) {
     return null;
   }
@@ -349,12 +353,14 @@ function googleEventToTask(event: GoogleCalendarEvent): PlannerTask | null {
   const end = event.end?.dateTime ?? event.end?.date ?? undefined;
 
   return {
-    id: `google:${event.id}`,
+    id: `google:${calendarId}:${event.id}`,
     title: event.summary?.trim() || "Google Calendar",
     start,
     end,
     isAllDay: Boolean(event.start?.date),
     source: "google",
+    googleCalendarId: calendarId,
+    googleCalendarName: calendarName,
     statusColor: googleColorIdToStatusColor(event.colorId),
     memo: event.description ?? "",
     tags: [],
@@ -367,6 +373,7 @@ export async function queryGoogleCalendarTasks(
   from: string,
   to: string,
   calendarId = "primary",
+  calendarName?: string,
 ) {
   const params = new URLSearchParams({
     timeMin: from,
@@ -389,7 +396,7 @@ export async function queryGoogleCalendarTasks(
   const data = await parseGoogleResponse<GoogleCalendarEventsResponse>(response);
 
   return (data.items ?? [])
-    .map(googleEventToTask)
+    .map((event) => googleEventToTask(event, calendarId, calendarName))
     .filter((task): task is PlannerTask => task !== null);
 }
 
