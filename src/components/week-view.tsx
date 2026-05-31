@@ -13,7 +13,6 @@ import {
 } from "date-fns";
 import { ja } from "date-fns/locale";
 import type {
-  MouseEvent,
   PointerEvent as ReactPointerEvent,
   UIEvent,
   WheelEvent,
@@ -60,6 +59,8 @@ const WHEEL_SETTLE_DELAY_MS = 180;
 const TIME_AXIS_WIDTH = 72;
 const DRAG_START_DISTANCE = 8;
 const DRAG_SNAP_MINUTES = 15;
+const CREATE_HOLD_DELAY_MS = 260;
+const CREATE_HOLD_MOVE_TOLERANCE = 10;
 const WEEK_SWIPE_DAY_STEP = 7;
 const WEEK_PAGE_DAY_OFFSETS = [-WEEK_SWIPE_DAY_STEP, 0, WEEK_SWIPE_DAY_STEP] as const;
 
@@ -90,6 +91,13 @@ type DragPreview = {
   end: Date;
   top: number;
   height: number;
+};
+
+type CreateHoldSession = {
+  pointerId: number;
+  startClientX: number;
+  startClientY: number;
+  timer: ReturnType<typeof setTimeout>;
 };
 
 function dateAtMinute(day: Date, totalMinutes: number) {
@@ -214,6 +222,7 @@ export function WeekView({
   const wheelSettleTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
   const dragSessionRef = useRef<DragSession | null>(null);
   const dragPreviewRef = useRef<DragPreview | null>(null);
+  const createHoldSessionRef = useRef<CreateHoldSession | null>(null);
   const suppressClickUntilRef = useRef(0);
   const [slideDirection, setSlideDirection] = useState<"next" | "previous">("next");
   const [wheelOffset, setWheelOffset] = useState(0);
@@ -276,6 +285,14 @@ export function WeekView({
     dragPreviewRef.current = preview;
     setDragPreview(preview);
   }
+
+  const cancelCreateHold = useCallback(() => {
+    const session = createHoldSessionRef.current;
+    if (session) {
+      clearTimeout(session.timer);
+      createHoldSessionRef.current = null;
+    }
+  }, []);
 
   function syncTimeScrollTop(scrollTop: number, source?: HTMLDivElement) {
     timeScrollTopRef.current = scrollTop;
@@ -345,7 +362,28 @@ export function WeekView({
       setCurrentDragPreview(nextPreview);
     }
 
+    function handleCreateHoldMove(event: PointerEvent) {
+      const session = createHoldSessionRef.current;
+      if (!session || event.pointerId !== session.pointerId) {
+        return;
+      }
+
+      const distance = Math.hypot(
+        event.clientX - session.startClientX,
+        event.clientY - session.startClientY,
+      );
+
+      if (distance > CREATE_HOLD_MOVE_TOLERANCE) {
+        cancelCreateHold();
+      }
+    }
+
     function finishPointerDrag(event: PointerEvent) {
+      const createSession = createHoldSessionRef.current;
+      if (createSession?.pointerId === event.pointerId) {
+        cancelCreateHold();
+      }
+
       const session = dragSessionRef.current;
       if (!session || event.pointerId !== session.pointerId) {
         return;
@@ -365,6 +403,7 @@ export function WeekView({
     }
 
     window.addEventListener("pointermove", handlePointerMove, true);
+    window.addEventListener("pointermove", handleCreateHoldMove, true);
     window.addEventListener("pointerup", finishPointerDrag, true);
     window.addEventListener("pointercancel", finishPointerDrag, true);
 
@@ -372,14 +411,21 @@ export function WeekView({
       if (wheelSettleTimerRef.current) {
         clearTimeout(wheelSettleTimerRef.current);
       }
+      cancelCreateHold();
       window.removeEventListener("pointermove", handlePointerMove, true);
+      window.removeEventListener("pointermove", handleCreateHoldMove, true);
       window.removeEventListener("pointerup", finishPointerDrag, true);
       window.removeEventListener("pointercancel", finishPointerDrag, true);
     };
-  }, [dragPointToPreview, onMoveTask]);
+  }, [cancelCreateHold, dragPointToPreview, onMoveTask]);
 
-  function handleColumnClick(day: Date, event: MouseEvent<HTMLDivElement>) {
-    if (isSwipeClickSuppressed()) {
+  function beginCreateHold(day: Date, event: ReactPointerEvent<HTMLDivElement>) {
+    if (
+      !event.isPrimary ||
+      event.button !== 0 ||
+      isSwipeClickSuppressed() ||
+      (event.target instanceof Element && event.target.closest("[data-task-card]"))
+    ) {
       return;
     }
 
@@ -389,7 +435,18 @@ export function WeekView({
     const roundedMinutes =
       Math.round(rawMinutes / DRAG_SNAP_MINUTES) * DRAG_SNAP_MINUTES;
     const start = dateAtSlot(day, roundedMinutes);
-    onCreate(start, addMinutes(start, 60));
+
+    cancelCreateHold();
+    createHoldSessionRef.current = {
+      pointerId: event.pointerId,
+      startClientX: event.clientX,
+      startClientY: event.clientY,
+      timer: setTimeout(() => {
+        createHoldSessionRef.current = null;
+        suppressClickUntilRef.current = Date.now() + 500;
+        onCreate(start, addMinutes(start, 60));
+      }, CREATE_HOLD_DELAY_MS),
+    };
   }
 
   function handleTimeScroll(event: UIEvent<HTMLDivElement>) {
@@ -602,9 +659,9 @@ export function WeekView({
                       key={day.toISOString()}
                       className="planner-grid-paper relative border-r border-[color:var(--planner-border)] last:border-r-0"
                       style={{ height: bodyHeight }}
-                      onClick={
+                      onPointerDown={
                         isCurrentPage
-                          ? (event) => handleColumnClick(day, event)
+                          ? (event) => beginCreateHold(day, event)
                           : undefined
                       }
                     >

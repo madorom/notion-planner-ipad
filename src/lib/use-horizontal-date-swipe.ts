@@ -6,6 +6,7 @@ import {
   useRef,
   useState,
   type PointerEvent as ReactPointerEvent,
+  type TouchEvent as ReactTouchEvent,
 } from "react";
 import { clamp } from "@/lib/utils";
 
@@ -18,7 +19,8 @@ const SUPPRESS_CLICK_MS = 450;
 type SwipeDirection = -1 | 1;
 
 type SwipeSession = {
-  pointerId: number;
+  pointerId?: number;
+  input: "pointer" | "touch";
   startX: number;
   startY: number;
   offset: number;
@@ -56,6 +58,7 @@ export function useHorizontalDateSwipe({
     (event: ReactPointerEvent<HTMLElement>) => {
       if (
         disabled ||
+        event.pointerType === "touch" ||
         !event.isPrimary ||
         event.button !== 0 ||
         isSwipeIgnored(event.target)
@@ -65,6 +68,7 @@ export function useHorizontalDateSwipe({
 
       sessionRef.current = {
         pointerId: event.pointerId,
+        input: "pointer",
         startX: event.clientX,
         startY: event.clientY,
         offset: 0,
@@ -75,20 +79,20 @@ export function useHorizontalDateSwipe({
     [disabled],
   );
 
-  const onPointerMove = useCallback(
-    (event: ReactPointerEvent<HTMLElement>) => {
+  const updateSession = useCallback(
+    (
+      clientX: number,
+      clientY: number,
+      preventDefault: () => void,
+      capturePointer?: () => void,
+    ) => {
       const session = sessionRef.current;
-      if (
-        disabled ||
-        !session ||
-        session.cancelled ||
-        event.pointerId !== session.pointerId
-      ) {
+      if (disabled || !session || session.cancelled) {
         return;
       }
 
-      const deltaX = event.clientX - session.startX;
-      const deltaY = event.clientY - session.startY;
+      const deltaX = clientX - session.startX;
+      const deltaY = clientY - session.startY;
       const absX = Math.abs(deltaX);
       const absY = Math.abs(deltaY);
 
@@ -103,24 +107,23 @@ export function useHorizontalDateSwipe({
         }
 
         session.active = true;
-        event.currentTarget.setPointerCapture(event.pointerId);
+        capturePointer?.();
       }
 
-      event.preventDefault();
+      preventDefault();
       session.offset = clamp(deltaX, -SWIPE_MAX_OFFSET, SWIPE_MAX_OFFSET);
       setOffset(session.offset);
     },
     [disabled],
   );
 
-  const finish = useCallback(
-    (event: ReactPointerEvent<HTMLElement>) => {
+  const finishSession = useCallback(
+    (width: number) => {
       const session = sessionRef.current;
-      if (!session || event.pointerId !== session.pointerId) {
+      if (!session) {
         return;
       }
 
-      const width = event.currentTarget.clientWidth;
       const commitDistance = Math.min(
         SWIPE_COMMIT_DISTANCE,
         Math.max(48, width * SWIPE_COMMIT_RATIO),
@@ -139,6 +142,95 @@ export function useHorizontalDateSwipe({
     [onSwipe, reset],
   );
 
+  const onPointerMove = useCallback(
+    (event: ReactPointerEvent<HTMLElement>) => {
+      const session = sessionRef.current;
+      if (
+        !session ||
+        session.input !== "pointer" ||
+        event.pointerId !== session.pointerId
+      ) {
+        return;
+      }
+
+      updateSession(
+        event.clientX,
+        event.clientY,
+        () => event.preventDefault(),
+        () => event.currentTarget.setPointerCapture(event.pointerId),
+      );
+    },
+    [updateSession],
+  );
+
+  const finishPointer = useCallback(
+    (event: ReactPointerEvent<HTMLElement>) => {
+      const session = sessionRef.current;
+      if (
+        !session ||
+        session.input !== "pointer" ||
+        event.pointerId !== session.pointerId
+      ) {
+        return;
+      }
+
+      finishSession(event.currentTarget.clientWidth);
+    },
+    [finishSession],
+  );
+
+  const onTouchStart = useCallback(
+    (event: ReactTouchEvent<HTMLElement>) => {
+      if (
+        disabled ||
+        event.touches.length !== 1 ||
+        isSwipeIgnored(event.target)
+      ) {
+        return;
+      }
+
+      const touch = event.touches[0];
+      sessionRef.current = {
+        input: "touch",
+        startX: touch.clientX,
+        startY: touch.clientY,
+        offset: 0,
+        active: false,
+        cancelled: false,
+      };
+    },
+    [disabled],
+  );
+
+  const onTouchMove = useCallback(
+    (event: ReactTouchEvent<HTMLElement>) => {
+      const session = sessionRef.current;
+      if (!session || session.input !== "touch" || event.touches.length !== 1) {
+        return;
+      }
+
+      const touch = event.touches[0];
+      updateSession(
+        touch.clientX,
+        touch.clientY,
+        () => event.preventDefault(),
+      );
+    },
+    [updateSession],
+  );
+
+  const finishTouch = useCallback(
+    (event: ReactTouchEvent<HTMLElement>) => {
+      const session = sessionRef.current;
+      if (!session || session.input !== "touch") {
+        return;
+      }
+
+      finishSession(event.currentTarget.clientWidth);
+    },
+    [finishSession],
+  );
+
   const isClickSuppressed = useCallback(
     () => Date.now() < suppressClickUntilRef.current,
     [],
@@ -150,8 +242,12 @@ export function useHorizontalDateSwipe({
     swipeHandlers: {
       onPointerDown,
       onPointerMove,
-      onPointerUp: finish,
+      onPointerUp: finishPointer,
       onPointerCancel: reset,
+      onTouchStart,
+      onTouchMove,
+      onTouchEnd: finishTouch,
+      onTouchCancel: reset,
     },
   };
 }
