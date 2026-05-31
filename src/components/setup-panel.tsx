@@ -9,6 +9,7 @@ import type {
   PropertyMapping,
   SchemaResponse,
 } from "@/lib/types";
+import { mappingValues, toggleMappingValue } from "@/lib/property-mapping";
 import { loadKnownConfigs, saveConfig } from "@/lib/storage";
 import { cx, shortId } from "@/lib/utils";
 
@@ -18,6 +19,11 @@ type SetupPanelProps = {
 };
 
 function autoMap(properties: NotionProperty[]): PropertyMapping {
+  const urlProperties = properties.filter((property) => property.type === "url");
+  const fileProperties = properties.filter(
+    (property) => property.type === "files",
+  );
+
   return {
     title: properties.find((property) => property.type === "title")?.name ?? "",
     date: properties.find((property) => property.type === "date")?.name ?? "",
@@ -26,8 +32,12 @@ function autoMap(properties: NotionProperty[]): PropertyMapping {
       properties.find((property) => property.type === "select")?.name,
     memo: properties.find((property) => property.type === "rich_text")?.name,
     tags: properties.find((property) => property.type === "multi_select")?.name,
-    url: properties.find((property) => property.type === "url")?.name,
-    files: properties.find((property) => property.type === "files")?.name,
+    url: urlProperties.length
+      ? urlProperties.map((property) => property.name)
+      : undefined,
+    files: fileProperties.length
+      ? fileProperties.map((property) => property.name)
+      : undefined,
   };
 }
 
@@ -154,8 +164,9 @@ export function SetupPanel({ initialConfig, onReady }: SetupPanelProps) {
           status: current.status || next.status,
           memo: current.memo || next.memo,
           tags: current.tags || next.tags,
-          url: current.url || next.url,
-          files: current.files || next.files,
+          url: mappingValues(current.url).length > 0 ? current.url : next.url,
+          files:
+            mappingValues(current.files).length > 0 ? current.files : next.files,
         };
       });
     } catch (connectError) {
@@ -231,6 +242,71 @@ export function SetupPanel({ initialConfig, onReady }: SetupPanelProps) {
           })}
         </select>
       </label>
+    );
+  }
+
+  function MultiMappingSelect({
+    label,
+    value,
+    properties,
+    supportedTypes,
+    onChange,
+  }: {
+    label: string;
+    value?: string | string[];
+    properties: NotionProperty[];
+    supportedTypes: string[];
+    onChange: (value: string[] | undefined) => void;
+  }) {
+    const selected = mappingValues(value);
+    const selectedSet = new Set(selected);
+
+    return (
+      <div className="grid gap-2 rounded-lg border border-[color:var(--planner-border)] bg-[color:var(--planner-surface-muted)] p-3">
+        <div className="flex items-center justify-between gap-3">
+          <span className="text-sm font-semibold text-[color:var(--planner-soft)]">
+            {label}
+          </span>
+          <span className="text-xs font-bold text-[color:var(--planner-soft)]">
+            {selected.length}件
+          </span>
+        </div>
+        <div className="grid gap-2">
+          {properties.map((property) => {
+            const supported = supportedTypes.includes(property.type);
+            const checked = selectedSet.has(property.name);
+
+            return (
+              <label
+                key={property.id}
+                className={cx(
+                  "flex min-h-11 items-center gap-3 rounded-lg border px-3 text-sm font-semibold transition",
+                  supported
+                    ? checked
+                      ? "border-mint-500/40 bg-mint-500/10"
+                      : "border-[color:var(--planner-border)] bg-[color:var(--planner-surface)]"
+                    : "border-[color:var(--planner-border)] bg-[color:var(--planner-surface)] opacity-45",
+                )}
+              >
+                <input
+                  type="checkbox"
+                  checked={checked}
+                  disabled={!supported}
+                  onChange={() => {
+                    const next = toggleMappingValue(value, property.name);
+                    onChange(next.length > 0 ? next : undefined);
+                  }}
+                  className="h-5 w-5 shrink-0 accent-mint-500 disabled:opacity-45"
+                />
+                <span className="min-w-0 flex-1 truncate">{property.name}</span>
+                <span className="font-mono text-xs text-[color:var(--planner-soft)]">
+                  {property.type}
+                </span>
+              </label>
+            );
+          })}
+        </div>
+      </div>
     );
   }
 
@@ -415,7 +491,7 @@ export function SetupPanel({ initialConfig, onReady }: SetupPanelProps) {
                   setMapping((current) => ({ ...current, tags: value }))
                 }
               />
-              <MappingSelect
+              <MultiMappingSelect
                 label="URL"
                 value={mapping.url}
                 properties={allProperties}
@@ -424,7 +500,7 @@ export function SetupPanel({ initialConfig, onReady }: SetupPanelProps) {
                   setMapping((current) => ({ ...current, url: value }))
                 }
               />
-              <MappingSelect
+              <MultiMappingSelect
                 label="添付資料"
                 value={mapping.files}
                 properties={allProperties}

@@ -11,6 +11,7 @@ import { TaskModal, taskPropertyTypes } from "@/components/task-modal";
 import { TaskSummaryPopover } from "@/components/task-summary-popover";
 import { WeekView } from "@/components/week-view";
 import { getViewRange, startOfPlannerWeek } from "@/lib/calendar";
+import { mappingValues } from "@/lib/property-mapping";
 import {
   clearConfig,
   applyThemeMode,
@@ -623,11 +624,11 @@ export function PlannerApp() {
           if (sourceConfig.mapping.tags) {
             params.set("tagsProperty", sourceConfig.mapping.tags);
           }
-          if (sourceConfig.mapping.url) {
-            params.set("urlProperty", sourceConfig.mapping.url);
+          for (const propertyName of mappingValues(sourceConfig.mapping.url)) {
+            params.append("urlProperty", propertyName);
           }
-          if (sourceConfig.mapping.files) {
-            params.set("filesProperty", sourceConfig.mapping.files);
+          for (const propertyName of mappingValues(sourceConfig.mapping.files)) {
+            params.append("filesProperty", propertyName);
           }
 
           const response = await fetch(`/api/notion/tasks?${params.toString()}`);
@@ -1106,6 +1107,7 @@ export function PlannerApp() {
       memo: task.memo,
       tags: task.tags,
       externalUrl: task.externalUrl,
+      externalUrls: task.externalUrls,
       attachments: task.attachments,
     };
   }

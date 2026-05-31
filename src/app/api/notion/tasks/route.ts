@@ -27,8 +27,8 @@ export async function GET(request: NextRequest) {
       status: request.nextUrl.searchParams.get("statusProperty") ?? undefined,
       memo: request.nextUrl.searchParams.get("memoProperty") ?? undefined,
       tags: request.nextUrl.searchParams.get("tagsProperty") ?? undefined,
-      url: request.nextUrl.searchParams.get("urlProperty") ?? undefined,
-      files: request.nextUrl.searchParams.get("filesProperty") ?? undefined,
+      url: request.nextUrl.searchParams.getAll("urlProperty"),
+      files: request.nextUrl.searchParams.getAll("filesProperty"),
     };
 
     if (!token) {

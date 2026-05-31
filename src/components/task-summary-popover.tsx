@@ -2,7 +2,13 @@
 
 import { format, parseISO } from "date-fns";
 import { ja } from "date-fns/locale";
-import { CalendarClock, ExternalLink, Paperclip, PencilLine, X } from "lucide-react";
+import {
+  CalendarClock,
+  ExternalLink,
+  Paperclip,
+  PencilLine,
+  X,
+} from "lucide-react";
 import type { PlannerTask } from "@/lib/types";
 import { IconButton } from "@/components/icon-button";
 import { cx } from "@/lib/utils";
@@ -56,6 +62,12 @@ export function TaskSummaryPopover({
   onEdit,
 }: TaskSummaryPopoverProps) {
   const canOpenEditor = task.source !== "google";
+  const externalUrls =
+    task.externalUrls?.length
+      ? task.externalUrls
+      : task.externalUrl
+        ? [{ name: "URL", url: task.externalUrl }]
+        : [];
   const propertySummaries =
     task.propertySummaries?.filter((property) => property.value) ?? [];
 
@@ -111,16 +123,24 @@ export function TaskSummaryPopover({
             </div>
           ) : null}
 
-          {task.externalUrl ? (
-            <a
-              href={task.externalUrl}
-              target="_blank"
-              rel="noreferrer"
-              className="inline-flex min-h-10 items-center gap-2 rounded-lg border border-[color:var(--planner-border)] px-3 text-sm font-bold text-mint-600"
-            >
-              <ExternalLink className="h-4 w-4" />
-              <span className="truncate">{task.externalUrl}</span>
-            </a>
+          {externalUrls.length > 0 ? (
+            <div className="grid gap-1.5">
+              {externalUrls.map((link) => (
+                <a
+                  key={`${link.name}-${link.url}`}
+                  href={link.url}
+                  target="_blank"
+                  rel="noreferrer"
+                  className="inline-flex min-h-10 items-center gap-2 rounded-lg border border-[color:var(--planner-border)] px-3 text-sm font-bold text-mint-600"
+                >
+                  <ExternalLink className="h-4 w-4" />
+                  <span className="min-w-0 flex-1 truncate">{link.url}</span>
+                  <span className="max-w-[34%] truncate text-xs text-[color:var(--planner-soft)]">
+                    {link.name}
+                  </span>
+                </a>
+              ))}
+            </div>
           ) : null}
 
           {(task.attachments ?? []).length > 0 ? (

@@ -4,11 +4,13 @@ import type {
   NotionPropertyType,
   NotionIcon,
   PlannerAttachment,
+  PlannerLink,
   PlannerPropertySummary,
   PlannerTask,
   PropertyMapping,
   TaskInput,
 } from "@/lib/types";
+import { mappingValues } from "@/lib/property-mapping";
 
 const NOTION_API_BASE = "https://api.notion.com/v1";
 const NOTION_VERSION = "2026-03-11";
@@ -521,6 +523,15 @@ function getExternalUrl(page: NotionPage, propertyName?: string) {
   return typeof value === "string" ? value : "";
 }
 
+function getExternalUrls(page: NotionPage, propertyNames: string[]) {
+  return propertyNames
+    .map((propertyName): PlannerLink | null => {
+      const url = getExternalUrl(page, propertyName);
+      return url ? { name: propertyName, url } : null;
+    })
+    .filter((link): link is PlannerLink => link !== null);
+}
+
 function fileNameFromUrl(url: string) {
   try {
     const parsed = new URL(url);
@@ -565,6 +576,13 @@ function getFiles(page: NotionPage, propertyName?: string): PlannerAttachment[] 
       };
     })
     .filter((file): file is PlannerAttachment => file !== null);
+}
+
+function getFilesFromProperties(
+  page: NotionPage,
+  propertyNames: string[],
+): PlannerAttachment[] {
+  return propertyNames.flatMap((propertyName) => getFiles(page, propertyName));
 }
 
 function checkboxSummary(value: unknown) {
@@ -666,6 +684,8 @@ export function pageToTask(
   const statusColor =
     status.statusColor ??
     statusOptionColor(properties, mapping.status, status.status);
+  const externalUrls = getExternalUrls(page, mappingValues(mapping.url));
+  const attachments = getFilesFromProperties(page, mappingValues(mapping.files));
 
   return {
     id: page.id,
@@ -676,8 +696,9 @@ export function pageToTask(
     memo: getMemo(page, mapping.memo),
     tags: getTags(page, mapping.tags),
     url: page.url,
-    externalUrl: getExternalUrl(page, mapping.url),
-    attachments: getFiles(page, mapping.files),
+    externalUrl: externalUrls[0]?.url,
+    externalUrls,
+    attachments,
     propertySummaries: getPropertySummaries(page, properties),
     icon: normalizeIcon(page.icon),
     status: status.status,
@@ -769,22 +790,28 @@ function buildProperties(
     };
   }
 
-  if (mapping.url) {
-    properties[mapping.url] = {
-      url: task.externalUrl?.trim() || null,
+  const urlPropertyNames = mappingValues(mapping.url);
+  for (const [index, propertyName] of urlPropertyNames.entries()) {
+    const matchingUrl =
+      task.externalUrls?.find((link) => link.name === propertyName)?.url ??
+      (index === 0 ? task.externalUrl : undefined);
+    properties[propertyName] = {
+      url: matchingUrl?.trim() || null,
     };
   }
 
-  if (mapping.files && task.attachments !== undefined) {
-    properties[mapping.files] = {
-      files: task.attachments
-        .filter((attachment) => attachment.url.trim())
-        .map((attachment) => ({
-          name: attachment.name || fileNameFromUrl(attachment.url),
-          type: "external",
-          external: { url: attachment.url },
-        })),
-    };
+  if (task.attachments !== undefined) {
+    for (const propertyName of mappingValues(mapping.files)) {
+      properties[propertyName] = {
+        files: task.attachments
+          .filter((attachment) => attachment.url.trim())
+          .map((attachment) => ({
+            name: attachment.name || fileNameFromUrl(attachment.url),
+            type: "external",
+            external: { url: attachment.url },
+          })),
+      };
+    }
   }
 
   return properties;

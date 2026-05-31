@@ -10,6 +10,7 @@ import {
   X,
 } from "lucide-react";
 import { datetimeLocalValue, localInputToIso } from "@/lib/calendar";
+import { firstMappingValue, mappingValues } from "@/lib/property-mapping";
 import type {
   AppConfig,
   NotionOption,
@@ -48,7 +49,9 @@ function optionNames(options?: NotionOption[]) {
   return options?.map((option) => option.name) ?? [];
 }
 
-function initialFromState(state: ModalState) {
+function initialFromState(state: ModalState, config: AppConfig) {
+  const urlPropertyNames = mappingValues(config.mapping.url);
+
   if (state.mode === "create") {
     return {
       title: "",
@@ -58,9 +61,14 @@ function initialFromState(state: ModalState) {
       memo: "",
       tags: "",
       externalUrl: "",
+      externalUrls: Object.fromEntries(
+        urlPropertyNames.map((propertyName) => [propertyName, ""]),
+      ) as Record<string, string>,
       attachments: "",
     };
   }
+
+  const taskExternalUrls = state.task.externalUrls ?? [];
 
   return {
     title: state.task.title,
@@ -70,6 +78,14 @@ function initialFromState(state: ModalState) {
     memo: state.task.memo ?? "",
     tags: state.task.tags.join(", "),
     externalUrl: state.task.externalUrl ?? "",
+    externalUrls: Object.fromEntries(
+      urlPropertyNames.map((propertyName, index) => [
+        propertyName,
+        taskExternalUrls.find((link) => link.name === propertyName)?.url ??
+          (index === 0 ? state.task.externalUrl : undefined) ??
+          "",
+      ]),
+    ) as Record<string, string>,
     attachments: attachmentInputValue(state.task.attachments),
   };
 }
@@ -150,8 +166,8 @@ export function taskPropertyTypes(config: AppConfig) {
     status: findProperty(config, mapping.status)?.type,
     memo: findProperty(config, mapping.memo)?.type,
     tags: findProperty(config, mapping.tags)?.type,
-    url: findProperty(config, mapping.url)?.type,
-    files: findProperty(config, mapping.files)?.type,
+    url: findProperty(config, firstMappingValue(mapping.url))?.type,
+    files: findProperty(config, firstMappingValue(mapping.files))?.type,
   } satisfies Partial<Record<keyof typeof mapping, NotionPropertyType>>;
 }
 
@@ -163,7 +179,7 @@ export function TaskModal({
   onClose,
   onSave,
 }: TaskModalProps) {
-  const initialForm = useMemo(() => initialFromState(state), [state]);
+  const initialForm = useMemo(() => initialFromState(state, config), [state, config]);
   const [form, setForm] = useState(initialForm);
   const [error, setError] = useState("");
 
@@ -174,12 +190,20 @@ export function TaskModal({
   const statusOptions = optionNames(statusProperty?.options);
   const hasMemo = Boolean(config.mapping.memo);
   const hasTags = Boolean(config.mapping.tags);
-  const hasUrl = Boolean(config.mapping.url);
-  const hasFiles = Boolean(config.mapping.files);
+  const urlPropertyNames = useMemo(
+    () => mappingValues(config.mapping.url),
+    [config.mapping.url],
+  );
+  const hasUrl = urlPropertyNames.length > 0;
+  const hasFiles = mappingValues(config.mapping.files).length > 0;
   const existingTask = state.mode === "edit" ? state.task : undefined;
   const isSidePanel = state.mode === "edit";
   const memoUrls = extractUrls(form.memo);
-  const externalUrl = form.externalUrl.trim();
+  const externalUrls = urlPropertyNames.map((propertyName) => ({
+    name: propertyName,
+    url: form.externalUrls[propertyName]?.trim() ?? "",
+  }));
+  const externalUrl = externalUrls[0]?.url ?? "";
   const attachmentLinks =
     readOnly && existingTask?.attachments
       ? existingTask.attachments
@@ -208,7 +232,10 @@ export function TaskModal({
       return;
     }
 
-    if (hasUrl && externalUrl && !isHttpUrl(externalUrl)) {
+    if (
+      hasUrl &&
+      externalUrls.some((link) => link.url && !isHttpUrl(link.url))
+    ) {
       setError("URLはhttps://またはhttp://から入力してください。");
       return;
     }
@@ -242,6 +269,9 @@ export function TaskModal({
           .map((tag) => tag.trim())
           .filter(Boolean),
         externalUrl: hasUrl ? externalUrl : undefined,
+        externalUrls: hasUrl
+          ? externalUrls.filter((link) => link.url)
+          : undefined,
         attachments: shouldSendAttachments ? attachments : undefined,
       },
       existingTask,
@@ -422,41 +452,59 @@ export function TaskModal({
           ) : null}
 
           {hasUrl ? (
-            <label className="grid gap-2">
+            <div className="grid gap-3">
               <span className="text-sm font-semibold text-[color:var(--planner-soft)]">
                 URL
               </span>
-              <div className="relative">
-                <Link className="pointer-events-none absolute left-4 top-1/2 h-5 w-5 -translate-y-1/2 text-[color:var(--planner-soft)]" />
-                <input
-                  type="url"
-                  value={form.externalUrl}
-                  readOnly={readOnly}
-                  onChange={(event) =>
-                    setForm((current) => ({
-                      ...current,
-                      externalUrl: event.target.value,
-                    }))
-                  }
-                  className={cx(
-                    "min-h-12 w-full rounded-lg border border-[color:var(--planner-border)] bg-[color:var(--planner-surface)] py-3 pl-12 pr-4 text-base outline-none transition focus:border-mint-500",
-                    readOnly &&
-                      "cursor-default bg-[color:var(--planner-surface-muted)]",
-                  )}
-                />
-              </div>
-              {readOnly && externalUrl ? (
-                <a
-                  href={externalUrl}
-                  target="_blank"
-                  rel="noreferrer"
-                  className="inline-flex min-h-9 items-center gap-2 rounded-lg border border-[color:var(--planner-border)] px-3 text-sm font-bold text-mint-600"
-                >
-                  <ExternalLink className="h-4 w-4" />
-                  <span className="truncate">{externalUrl}</span>
-                </a>
-              ) : null}
-            </label>
+              {urlPropertyNames.map((propertyName) => {
+                const value = form.externalUrls[propertyName] ?? "";
+
+                return (
+                  <label key={propertyName} className="grid gap-2">
+                    <span className="text-xs font-bold text-[color:var(--planner-soft)]">
+                      {propertyName}
+                    </span>
+                    <div className="relative">
+                      <Link className="pointer-events-none absolute left-4 top-1/2 h-5 w-5 -translate-y-1/2 text-[color:var(--planner-soft)]" />
+                      <input
+                        type="url"
+                        value={value}
+                        readOnly={readOnly}
+                        onChange={(event) =>
+                          setForm((current) => ({
+                            ...current,
+                            externalUrl:
+                              propertyName === urlPropertyNames[0]
+                                ? event.target.value
+                                : current.externalUrl,
+                            externalUrls: {
+                              ...current.externalUrls,
+                              [propertyName]: event.target.value,
+                            },
+                          }))
+                        }
+                        className={cx(
+                          "min-h-12 w-full rounded-lg border border-[color:var(--planner-border)] bg-[color:var(--planner-surface)] py-3 pl-12 pr-4 text-base outline-none transition focus:border-mint-500",
+                          readOnly &&
+                            "cursor-default bg-[color:var(--planner-surface-muted)]",
+                        )}
+                      />
+                    </div>
+                    {readOnly && value.trim() ? (
+                      <a
+                        href={value.trim()}
+                        target="_blank"
+                        rel="noreferrer"
+                        className="inline-flex min-h-9 items-center gap-2 rounded-lg border border-[color:var(--planner-border)] px-3 text-sm font-bold text-mint-600"
+                      >
+                        <ExternalLink className="h-4 w-4" />
+                        <span className="truncate">{value.trim()}</span>
+                      </a>
+                    ) : null}
+                  </label>
+                );
+              })}
+            </div>
           ) : null}
 
           {hasFiles ? (

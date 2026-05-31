@@ -34,8 +34,8 @@ export type PropertyMapping = {
   status?: string;
   memo?: string;
   tags?: string;
-  url?: string;
-  files?: string;
+  url?: string | string[];
+  files?: string | string[];
 };
 
 export type AppConfig = {
@@ -75,9 +75,15 @@ export type PlannerTask = {
   tags: string[];
   url?: string;
   externalUrl?: string;
+  externalUrls?: PlannerLink[];
   attachments?: PlannerAttachment[];
   propertySummaries?: PlannerPropertySummary[];
   icon?: NotionIcon;
+};
+
+export type PlannerLink = {
+  name: string;
+  url: string;
 };
 
 export type PlannerAttachment = {
@@ -121,6 +127,7 @@ export type TaskInput = {
   memo?: string;
   tags?: string[];
   externalUrl?: string;
+  externalUrls?: PlannerLink[];
   attachments?: PlannerAttachment[];
 };
 
