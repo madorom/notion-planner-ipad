@@ -40,6 +40,7 @@ type CalendarHeaderProps = {
   weekVisibleDays: number;
   notionConfigs: AppConfig[];
   selectedNotionConfigIds: string[];
+  splitAllDayNotionConfigIds: string[];
   googleConfigured: boolean;
   googleConnected: boolean;
   googleCalendars: GoogleCalendarOption[];
@@ -56,6 +57,8 @@ type CalendarHeaderProps = {
   onWeekVisibleDaysChange: (dayCount: number) => void;
   onToggleNotionConfig: (configId: string) => void;
   onShowAllNotionConfigs: () => void;
+  onToggleSplitAllDayNotionConfig: (configId: string) => void;
+  onClearSplitAllDayNotionConfigs: () => void;
   onToggleGoogleCalendar: () => void;
   onToggleGoogleCalendarId: (calendarId: string) => void;
   onGoogleCalendarColorChange: (calendarId: string, color: string) => void;
@@ -103,6 +106,7 @@ export function CalendarHeader({
   weekVisibleDays,
   notionConfigs,
   selectedNotionConfigIds,
+  splitAllDayNotionConfigIds,
   googleConfigured,
   googleConnected,
   googleCalendars,
@@ -119,6 +123,8 @@ export function CalendarHeader({
   onWeekVisibleDaysChange,
   onToggleNotionConfig,
   onShowAllNotionConfigs,
+  onToggleSplitAllDayNotionConfig,
+  onClearSplitAllDayNotionConfigs,
   onToggleGoogleCalendar,
   onToggleGoogleCalendarId,
   onGoogleCalendarColorChange,
@@ -135,14 +141,23 @@ export function CalendarHeader({
   const hiddenStatusSet = new Set(hiddenStatuses);
   const activeFilterCount = hiddenStatuses.length;
   const selectedNotionConfigSet = new Set(selectedNotionConfigIds);
+  const splitAllDayNotionConfigSet = new Set(splitAllDayNotionConfigIds);
   const selectedNotionConfigCount = notionConfigs.filter((item) =>
     selectedNotionConfigSet.has(appConfigKey(item)),
   ).length;
+  const splitAllDayNotionConfigCount = notionConfigs.filter((item) => {
+    const configId = appConfigKey(item);
+    return (
+      selectedNotionConfigSet.has(configId) &&
+      splitAllDayNotionConfigSet.has(configId)
+    );
+  }).length;
   const hiddenNotionConfigCount = Math.max(
     0,
     notionConfigs.length - selectedNotionConfigCount,
   );
-  const activeMenuCount = activeFilterCount + hiddenNotionConfigCount;
+  const activeMenuCount =
+    activeFilterCount + hiddenNotionConfigCount + splitAllDayNotionConfigCount;
   const themeLabel =
     themeMode === "dark" ? "ホワイトモード" : "ダークモード";
   const googleLabel = !googleConfigured
@@ -153,6 +168,9 @@ export function CalendarHeader({
   const selectedGoogleCalendarSet = new Set(selectedGoogleCalendarIds);
   const selectedGoogleCalendars = googleCalendars.filter((calendar) =>
     selectedGoogleCalendarSet.has(calendar.id),
+  );
+  const selectedNotionConfigs = notionConfigs.filter((item) =>
+    selectedNotionConfigSet.has(appConfigKey(item)),
   );
 
   useEffect(() => {
@@ -463,6 +481,65 @@ export function CalendarHeader({
                           </label>
                         );
                       })}
+                    </div>
+                    <div className="mt-3 rounded-lg border border-[color:var(--planner-border)] bg-[color:var(--planner-surface-muted)] p-3">
+                      <div className="mb-2 flex items-center justify-between gap-3">
+                        <p className="flex min-w-0 items-center gap-2 text-xs font-bold text-[color:var(--planner-soft)]">
+                          <CalendarDays className="h-4 w-4 shrink-0" />
+                          <span className="truncate">終日を別行</span>
+                          {splitAllDayNotionConfigCount > 0 ? (
+                            <span className="rounded-full bg-[color:var(--planner-surface)] px-2 py-0.5 text-[10px]">
+                              {splitAllDayNotionConfigCount}件
+                            </span>
+                          ) : null}
+                        </p>
+                        <button
+                          type="button"
+                          onClick={onClearSplitAllDayNotionConfigs}
+                          disabled={splitAllDayNotionConfigIds.length === 0}
+                          className="min-h-8 rounded-lg px-2 text-xs font-bold text-mint-600 disabled:opacity-45"
+                        >
+                          解除
+                        </button>
+                      </div>
+                      <div className="grid gap-1.5">
+                        {selectedNotionConfigs.length > 0 ? (
+                          selectedNotionConfigs.map((notionConfig) => {
+                            const configId = appConfigKey(notionConfig);
+                            const checked =
+                              splitAllDayNotionConfigSet.has(configId);
+
+                            return (
+                              <label
+                                key={`split-all-day-${configId}`}
+                                className={cx(
+                                  "flex min-h-10 items-center gap-2 rounded-lg border px-2 py-1.5 transition",
+                                  checked
+                                    ? "border-mint-500/45 bg-mint-500/10"
+                                    : "border-transparent bg-[color:var(--planner-surface)]",
+                                )}
+                              >
+                                <input
+                                  type="checkbox"
+                                  checked={checked}
+                                  onChange={() =>
+                                    onToggleSplitAllDayNotionConfig(configId)
+                                  }
+                                  className="h-4 w-4 shrink-0 accent-mint-500"
+                                />
+                                <span className="min-w-0 flex-1 truncate text-xs font-semibold">
+                                  {notionConfig.targetName ??
+                                    "Notion database"}
+                                </span>
+                              </label>
+                            );
+                          })
+                        ) : (
+                          <p className="rounded-lg bg-[color:var(--planner-surface)] px-2 py-2 text-xs font-semibold text-[color:var(--planner-soft)]">
+                            表示中のDBがありません
+                          </p>
+                        )}
+                      </div>
                     </div>
                   </div>
                 ) : null}

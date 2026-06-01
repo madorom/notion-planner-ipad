@@ -148,6 +148,7 @@ export type UserSettings = {
   notionConfigs: AppConfig[];
   activeNotionDataSourceId?: string | null;
   selectedNotionDataSourceIds: string[];
+  splitAllDayNotionDataSourceIds: string[];
   hiddenStatuses: string[];
   showAllDayTasks: boolean;
   weekVisibleDays: number;

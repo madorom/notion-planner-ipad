@@ -8,6 +8,8 @@ const SELECTED_NOTION_CONFIG_IDS_KEY =
 const THEME_MODE_KEY = "notion-planner-ipad:theme:v1";
 const INTERACTION_MODE_KEY = "notion-planner-ipad:interaction-mode:v1";
 const SHOW_ALL_DAY_TASKS_KEY = "notion-planner-ipad:show-all-day:v1";
+const SPLIT_ALL_DAY_NOTION_CONFIG_IDS_KEY =
+  "notion-planner-ipad:split-all-day-notion-configs:v1";
 const WEEK_VISIBLE_DAYS_KEY = "notion-planner-ipad:week-visible-days:v1";
 const GOOGLE_CALENDAR_ID_KEY = "notion-planner-ipad:google-calendar-id:v1";
 const GOOGLE_CALENDAR_IDS_KEY = "notion-planner-ipad:google-calendar-ids:v1";
@@ -207,6 +209,34 @@ export function saveShowAllDayTasks(showAllDayTasks: boolean) {
   window.localStorage.setItem(
     SHOW_ALL_DAY_TASKS_KEY,
     showAllDayTasks ? "true" : "false",
+  );
+}
+
+export function loadSplitAllDayNotionConfigIds() {
+  if (typeof window === "undefined") {
+    return [];
+  }
+
+  const raw = window.localStorage.getItem(SPLIT_ALL_DAY_NOTION_CONFIG_IDS_KEY);
+  if (!raw) {
+    return [];
+  }
+
+  try {
+    const parsed = JSON.parse(raw);
+    return Array.isArray(parsed)
+      ? parsed.filter((value): value is string => typeof value === "string")
+      : [];
+  } catch {
+    window.localStorage.removeItem(SPLIT_ALL_DAY_NOTION_CONFIG_IDS_KEY);
+    return [];
+  }
+}
+
+export function saveSplitAllDayNotionConfigIds(configIds: string[]) {
+  window.localStorage.setItem(
+    SPLIT_ALL_DAY_NOTION_CONFIG_IDS_KEY,
+    JSON.stringify(Array.from(new Set(configIds))),
   );
 }
 

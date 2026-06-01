@@ -25,6 +25,7 @@ import {
   loadKnownConfigs,
   loadSelectedNotionConfigIds,
   loadShowAllDayTasks,
+  loadSplitAllDayNotionConfigIds,
   loadThemeMode,
   loadWeekVisibleDays,
   saveConfig,
@@ -35,6 +36,7 @@ import {
   saveKnownConfig,
   saveSelectedNotionConfigIds,
   saveShowAllDayTasks,
+  saveSplitAllDayNotionConfigIds,
   saveThemeMode,
   saveWeekVisibleDays,
   type InteractionMode,
@@ -174,6 +176,9 @@ export function PlannerApp() {
   const [summaryTask, setSummaryTask] = useState<PlannerTask | null>(null);
   const [hiddenStatuses, setHiddenStatuses] = useState<string[]>([]);
   const [showAllDayTasks, setShowAllDayTasks] = useState(true);
+  const [splitAllDayNotionConfigIds, setSplitAllDayNotionConfigIds] = useState<
+    string[]
+  >([]);
   const [weekVisibleDays, setWeekVisibleDays] = useState(7);
   const [undoStack, setUndoStack] = useState<TaskHistoryAction[]>([]);
   const [redoStack, setRedoStack] = useState<TaskHistoryAction[]>([]);
@@ -228,13 +233,18 @@ export function PlannerApp() {
             : localNotionConfigs[0]
               ? [configIdentity(localNotionConfigs[0])]
               : [];
+      const splitAllDayConfigIds = loadSplitAllDayNotionConfigIds().filter(
+        (item) => availableConfigIds.has(item),
+      );
       const nextThemeMode = loadThemeMode() ?? "light";
       setConfig(stored);
       setKnownNotionConfigs(localNotionConfigs);
       setSelectedNotionConfigIds(fallbackSelectedConfigIds);
+      setSplitAllDayNotionConfigIds(splitAllDayConfigIds);
       if (fallbackSelectedConfigIds.length > 0) {
         saveSelectedNotionConfigIds(fallbackSelectedConfigIds);
       }
+      saveSplitAllDayNotionConfigIds(splitAllDayConfigIds);
       setSetupOpen(!stored);
       setHiddenStatuses(loadHiddenStatuses());
       setShowAllDayTasks(loadShowAllDayTasks());
@@ -411,6 +421,16 @@ export function PlannerApp() {
     return config ? [config] : [];
   }, [config, notionConfigLookup, selectedNotionConfigIds]);
 
+  const visibleSplitAllDayNotionConfigIds = useMemo(() => {
+    const visibleConfigIds = new Set(
+      selectedNotionConfigs.map((item) => configIdentity(item)),
+    );
+
+    return splitAllDayNotionConfigIds.filter((item) =>
+      visibleConfigIds.has(item),
+    );
+  }, [selectedNotionConfigs, splitAllDayNotionConfigIds]);
+
   const buildCurrentUserSettings = useCallback((): UserSettings => {
     const notionConfigs = uniqueConfigs([
       ...(config ? [config] : []),
@@ -423,6 +443,9 @@ export function PlannerApp() {
     const validSelectedConfigIds = selectedNotionConfigIds.filter((item) =>
       availableConfigIds.has(item),
     );
+    const validSplitAllDayConfigIds = splitAllDayNotionConfigIds.filter((item) =>
+      availableConfigIds.has(item),
+    );
     const fallbackSelectedConfigIds = config ? [configIdentity(config)] : [];
 
     return {
@@ -432,6 +455,7 @@ export function PlannerApp() {
         validSelectedConfigIds.length > 0
           ? validSelectedConfigIds
           : fallbackSelectedConfigIds,
+      splitAllDayNotionDataSourceIds: validSplitAllDayConfigIds,
       hiddenStatuses,
       showAllDayTasks,
       weekVisibleDays,
@@ -448,6 +472,7 @@ export function PlannerApp() {
     knownNotionConfigs,
     selectedNotionConfigIds,
     selectedGoogleCalendarIds,
+    splitAllDayNotionConfigIds,
     showAllDayTasks,
     themeMode,
     weekVisibleDays,
@@ -482,6 +507,10 @@ export function PlannerApp() {
       selectedConfigIds.length > 0
         ? selectedConfigIds
         : fallbackSelectedConfigIds;
+    const splitAllDayConfigIds =
+      settings.splitAllDayNotionDataSourceIds.filter((item) =>
+        availableConfigIds.has(item),
+      );
 
     if (activeConfig) {
       saveConfig(activeConfig);
@@ -491,6 +520,7 @@ export function PlannerApp() {
 
     saveHiddenStatuses(settings.hiddenStatuses);
     saveSelectedNotionConfigIds(nextSelectedConfigIds);
+    saveSplitAllDayNotionConfigIds(splitAllDayConfigIds);
     saveShowAllDayTasks(settings.showAllDayTasks);
     saveWeekVisibleDays(settings.weekVisibleDays);
     saveThemeMode(settings.themeMode);
@@ -501,6 +531,7 @@ export function PlannerApp() {
     setConfig(activeConfig);
     setKnownNotionConfigs(notionConfigs);
     setSelectedNotionConfigIds(nextSelectedConfigIds);
+    setSplitAllDayNotionConfigIds(splitAllDayConfigIds);
     setSetupOpen(!activeConfig);
     setHiddenStatuses(settings.hiddenStatuses);
     setShowAllDayTasks(settings.showAllDayTasks);
@@ -849,6 +880,7 @@ export function PlannerApp() {
     settingsSync.configured,
     settingsSync.loaded,
     showAllDayTasks,
+    splitAllDayNotionConfigIds,
     themeMode,
     weekVisibleDays,
   ]);
@@ -1072,6 +1104,29 @@ export function PlannerApp() {
         setConfig(nextActiveConfig);
       }
     }
+  }
+
+  function toggleSplitAllDayNotionConfig(configId: string) {
+    const availableIds = new Set(
+      notionConfigs.map((item) => configIdentity(item)),
+    );
+
+    if (!availableIds.has(configId)) {
+      return;
+    }
+
+    setSplitAllDayNotionConfigIds((current) => {
+      const next = current.includes(configId)
+        ? current.filter((item) => item !== configId)
+        : [...current, configId];
+      saveSplitAllDayNotionConfigIds(next);
+      return next;
+    });
+  }
+
+  function clearSplitAllDayNotionConfigs() {
+    setSplitAllDayNotionConfigIds([]);
+    saveSplitAllDayNotionConfigIds([]);
   }
 
   function showAllNotionConfigs() {
@@ -1452,6 +1507,7 @@ export function PlannerApp() {
         weekVisibleDays={weekVisibleDays}
         notionConfigs={notionConfigs}
         selectedNotionConfigIds={selectedNotionConfigIds}
+        splitAllDayNotionConfigIds={splitAllDayNotionConfigIds}
         googleConfigured={googleSession.configured}
         googleConnected={googleSession.connected}
         googleCalendars={googleCalendars}
@@ -1468,6 +1524,8 @@ export function PlannerApp() {
         onWeekVisibleDaysChange={changeWeekVisibleDays}
         onToggleNotionConfig={toggleNotionConfig}
         onShowAllNotionConfigs={showAllNotionConfigs}
+        onToggleSplitAllDayNotionConfig={toggleSplitAllDayNotionConfig}
+        onClearSplitAllDayNotionConfigs={clearSplitAllDayNotionConfigs}
         onToggleGoogleCalendar={toggleGoogleCalendar}
         onToggleGoogleCalendarId={toggleGoogleCalendarId}
         onGoogleCalendarColorChange={changeGoogleCalendarColor}
@@ -1494,6 +1552,7 @@ export function PlannerApp() {
           tasks={statusVisibleTasks}
           editable={editable}
           showAllDayTasks={showAllDayTasks}
+          splitAllDayNotionConfigIds={visibleSplitAllDayNotionConfigIds}
           weekVisibleDays={weekVisibleDays}
           onToggleAllDayTasks={toggleAllDayTasks}
           onCreate={(start, end) => setModal({ mode: "create", start, end })}

@@ -41,6 +41,7 @@ type WeekViewProps = {
   tasks: PlannerTask[];
   editable: boolean;
   showAllDayTasks: boolean;
+  splitAllDayNotionConfigIds: string[];
   weekVisibleDays: number;
   onToggleAllDayTasks: () => void;
   onCreate: (start: Date, end: Date) => void;
@@ -216,6 +217,7 @@ export function WeekView({
   tasks,
   editable,
   showAllDayTasks,
+  splitAllDayNotionConfigIds,
   weekVisibleDays,
   onToggleAllDayTasks,
   onCreate,
@@ -239,6 +241,13 @@ export function WeekView({
     () => tasks.filter((task) => task.isAllDay).length,
     [tasks],
   );
+  const splitAllDayNotionConfigSet = useMemo(
+    () => new Set(splitAllDayNotionConfigIds),
+    [splitAllDayNotionConfigIds],
+  );
+  const showSplitAllDayRow =
+    showAllDayTasks && splitAllDayNotionConfigSet.size > 0;
+  const allDayRowLabels = showSplitAllDayRow ? ["終日", "DB終日"] : ["終日"];
   const tableStyle = {
     width: `${(days.length / visibleDayCount) * 100}%`,
   };
@@ -267,6 +276,32 @@ export function WeekView({
   const createHoldSessionRef = useRef<CreateHoldSession | null>(null);
   const suppressClickUntilRef = useRef(0);
   const [dragPreview, setDragPreview] = useState<DragPreview | null>(null);
+
+  const allDayRowsForDay = useCallback(
+    (day: Date) => {
+      const allDayTasks = allDayTasksForDay(tasks, day);
+
+      if (!showSplitAllDayRow) {
+        return [allDayTasks];
+      }
+
+      const splitTasks = allDayTasks.filter(
+        (task) =>
+          task.source === "notion" &&
+          task.notionDataSourceId &&
+          splitAllDayNotionConfigSet.has(task.notionDataSourceId),
+      );
+      const mainTasks = allDayTasks.filter(
+        (task) =>
+          task.source !== "notion" ||
+          !task.notionDataSourceId ||
+          !splitAllDayNotionConfigSet.has(task.notionDataSourceId),
+      );
+
+      return [mainTasks, splitTasks];
+    },
+    [showSplitAllDayRow, splitAllDayNotionConfigSet, tasks],
+  );
 
   const dragPointToPreview = useCallback(
     (
@@ -583,6 +618,7 @@ export function WeekView({
     reportVisibleDate,
     scrollRequestKey,
     showAllDayTasks,
+    showSplitAllDayRow,
     visibleDayCount,
   ]);
 
@@ -701,14 +737,17 @@ export function WeekView({
               ) : null}
             </button>
           </div>
-          {showAllDayTasks ? (
-            <div
-              className="border-b border-r border-[color:var(--planner-border)] bg-[color:var(--planner-surface-muted)] px-2 py-3 text-right text-xs font-bold text-[color:var(--planner-soft)]"
-              style={{ height: ALL_DAY_ROW_HEIGHT }}
-            >
-              終日
-            </div>
-          ) : null}
+          {showAllDayTasks
+            ? allDayRowLabels.map((label) => (
+                <div
+                  key={`fixed-${label}`}
+                  className="border-b border-r border-[color:var(--planner-border)] bg-[color:var(--planner-surface-muted)] px-2 py-3 text-right text-xs font-bold text-[color:var(--planner-soft)]"
+                  style={{ height: ALL_DAY_ROW_HEIGHT }}
+                >
+                  {label}
+                </div>
+              ))
+            : null}
           <div className="week-time-scroll overflow-hidden border-r border-[color:var(--planner-border)] bg-[color:var(--planner-surface-muted)]">
             <div
               ref={fixedTimeAxisRef}
@@ -756,49 +795,53 @@ export function WeekView({
               ))}
             </div>
 
-            {showAllDayTasks ? (
-              <div
-                className="grid border-b border-[color:var(--planner-border)] bg-[color:var(--planner-surface-muted)]"
-                style={alignedGridStyle}
-              >
-                {days.map((day) => {
-                  const allDayTasks = allDayTasksForDay(tasks, day);
-                  const visibleAllDayTasks = allDayTasks.slice(0, 3);
-                  const hiddenAllDayCount =
-                    allDayTasks.length - visibleAllDayTasks.length;
+            {showAllDayTasks
+              ? allDayRowLabels.map((label, rowIndex) => (
+                  <div
+                    key={`all-day-row-${label}`}
+                    className="grid border-b border-[color:var(--planner-border)] bg-[color:var(--planner-surface-muted)]"
+                    style={alignedGridStyle}
+                  >
+                    {days.map((day) => {
+                      const allDayRows = allDayRowsForDay(day);
+                      const rowTasks = allDayRows[rowIndex] ?? [];
+                      const visibleAllDayTasks = rowTasks.slice(0, 3);
+                      const hiddenAllDayCount =
+                        rowTasks.length - visibleAllDayTasks.length;
 
-                  return (
-                    <div
-                      key={`all-day-${day.toISOString()}`}
-                      className={`border-r border-[color:var(--planner-border)] p-2 last:border-r-0 ${
-                        isSameDay(day, new Date()) ? "bg-mint-500/10" : ""
-                      }`}
-                      style={{ height: ALL_DAY_ROW_HEIGHT }}
-                    >
-                      <div
-                        className="grid gap-1.5 overflow-y-auto pr-1 planner-scroll"
-                        style={{ maxHeight: ALL_DAY_ROW_HEIGHT - 16 }}
-                      >
-                        {visibleAllDayTasks.map((task) => (
-                          <TaskCard
-                            key={task.id}
-                            task={task}
-                            compact
-                            readOnly={!editable && task.source !== "google"}
-                            onClick={handleTaskClick}
-                          />
-                        ))}
-                        {hiddenAllDayCount > 0 ? (
-                          <div className="rounded-md bg-[color:var(--planner-surface)] px-2 py-1 text-xs font-bold text-[color:var(--planner-soft)]">
-                            +{hiddenAllDayCount}件
+                      return (
+                        <div
+                          key={`all-day-${rowIndex}-${day.toISOString()}`}
+                          className={`border-r border-[color:var(--planner-border)] p-2 last:border-r-0 ${
+                            isSameDay(day, new Date()) ? "bg-mint-500/10" : ""
+                          }`}
+                          style={{ height: ALL_DAY_ROW_HEIGHT }}
+                        >
+                          <div
+                            className="grid gap-1.5 overflow-y-auto pr-1 planner-scroll"
+                            style={{ maxHeight: ALL_DAY_ROW_HEIGHT - 16 }}
+                          >
+                            {visibleAllDayTasks.map((task) => (
+                              <TaskCard
+                                key={task.id}
+                                task={task}
+                                compact
+                                readOnly={!editable && task.source !== "google"}
+                                onClick={handleTaskClick}
+                              />
+                            ))}
+                            {hiddenAllDayCount > 0 ? (
+                              <div className="rounded-md bg-[color:var(--planner-surface)] px-2 py-1 text-xs font-bold text-[color:var(--planner-soft)]">
+                                +{hiddenAllDayCount}件
+                              </div>
+                            ) : null}
                           </div>
-                        ) : null}
-                      </div>
-                    </div>
-                  );
-                })}
-              </div>
-            ) : null}
+                        </div>
+                      );
+                    })}
+                  </div>
+                ))
+              : null}
 
             <div
               ref={timeScrollRef}

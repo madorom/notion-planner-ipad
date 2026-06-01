@@ -202,6 +202,9 @@ export function sanitizeUserSettings(value: unknown): UserSettings | null {
         ? value.activeNotionDataSourceId
         : null,
     selectedNotionDataSourceIds: stringArray(value.selectedNotionDataSourceIds),
+    splitAllDayNotionDataSourceIds: stringArray(
+      value.splitAllDayNotionDataSourceIds,
+    ),
     hiddenStatuses: stringArray(value.hiddenStatuses),
     showAllDayTasks: value.showAllDayTasks !== false,
     weekVisibleDays: clampWeekVisibleDays(value.weekVisibleDays),
