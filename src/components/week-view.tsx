@@ -58,6 +58,8 @@ const TIME_AXIS_WIDTH = 72;
 const DATE_HEADER_HEIGHT = 84;
 const ALL_DAY_ROW_HEIGHT = 72;
 const GRID_SCROLLBAR_GUTTER = 10;
+const TIMED_TASK_GAP = 4;
+const MIN_TIMED_TASK_HEIGHT = 18;
 const DRAG_START_DISTANCE = 8;
 const DRAG_SNAP_MINUTES = 15;
 const CREATE_HOLD_DELAY_MS = 260;
@@ -117,6 +119,11 @@ function roundToSnap(totalMinutes: number) {
   return Math.round(totalMinutes / DRAG_SNAP_MINUTES) * DRAG_SNAP_MINUTES;
 }
 
+function timedTaskHeight(durationMinutes: number) {
+  const rawHeight = (durationMinutes / 60) * HOUR_HEIGHT;
+  return Math.max(MIN_TIMED_TASK_HEIGHT, rawHeight - TIMED_TASK_GAP);
+}
+
 function taskInterval(task: PlannerTask): LayoutTask {
   const start = parseISO(task.start);
   const fallbackEnd = addHours(start, 1);
@@ -138,7 +145,7 @@ function taskInterval(task: PlannerTask): LayoutTask {
     startMinute,
     endMinute,
     top: ((startMinute - visibleStart) / 60) * HOUR_HEIGHT,
-    height: Math.max(48, ((endMinute - startMinute) / 60) * HOUR_HEIGHT),
+    height: timedTaskHeight(endMinute - startMinute),
     lane: 0,
     laneCount: 1,
   };
@@ -299,7 +306,7 @@ export function WeekView({
         start,
         end,
         top: ((startMinute - visibleStart) / 60) * HOUR_HEIGHT,
-        height: Math.max(48, (durationMinutes / 60) * HOUR_HEIGHT),
+        height: timedTaskHeight(durationMinutes),
       };
     },
     [bodyHeight, days],
