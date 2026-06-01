@@ -37,6 +37,7 @@ import { clamp } from "@/lib/utils";
 
 type WeekViewProps = {
   currentDate: Date;
+  scrollRequestKey: number;
   tasks: PlannerTask[];
   editable: boolean;
   showAllDayTasks: boolean;
@@ -204,6 +205,7 @@ function columnWidthFor(node: HTMLDivElement, dayCount: number) {
 
 export function WeekView({
   currentDate,
+  scrollRequestKey,
   tasks,
   editable,
   showAllDayTasks,
@@ -250,6 +252,7 @@ export function WeekView({
   const isSyncingHorizontalScrollRef = useRef(false);
   const previousVisibleDayCountRef = useRef(visibleDayCount);
   const previousCurrentDateKeyRef = useRef(format(anchorDate, "yyyy-MM-dd"));
+  const previousScrollRequestKeyRef = useRef(scrollRequestKey);
   const lastWindowShiftAtRef = useRef(0);
   const lastVisibleDateKeyRef = useRef("");
   const dragSessionRef = useRef<DragSession | null>(null);
@@ -522,6 +525,13 @@ export function WeekView({
     } else if (pendingScrollAdjustmentRef.current !== 0) {
       horizontalScroll.scrollLeft += pendingScrollAdjustmentRef.current;
       pendingScrollAdjustmentRef.current = 0;
+    } else if (previousScrollRequestKeyRef.current !== scrollRequestKey) {
+      const currentDateIndex = days.findIndex(
+        (day) => format(day, "yyyy-MM-dd") === currentDateKey,
+      );
+      if (currentDateIndex >= 0) {
+        horizontalScroll.scrollLeft = currentDateIndex * columnWidth;
+      }
     } else if (previousVisibleDayCountRef.current !== visibleDayCount) {
       const visibleDateIndex = days.findIndex(
         (day) => format(day, "yyyy-MM-dd") === lastVisibleDateKeyRef.current,
@@ -539,6 +549,7 @@ export function WeekView({
     }
     previousVisibleDayCountRef.current = visibleDayCount;
     previousCurrentDateKeyRef.current = currentDateKey;
+    previousScrollRequestKeyRef.current = scrollRequestKey;
 
     syncHorizontalScrollbar(horizontalScroll.scrollLeft, horizontalScroll);
 
@@ -563,6 +574,7 @@ export function WeekView({
     days,
     days.length,
     reportVisibleDate,
+    scrollRequestKey,
     showAllDayTasks,
     visibleDayCount,
   ]);

@@ -165,6 +165,7 @@ export function PlannerApp() {
   const [displayDate, setDisplayDate] = useState(() =>
     startOfPlannerWeek(new Date()),
   );
+  const [weekScrollRequestKey, setWeekScrollRequestKey] = useState(0);
   const [tasks, setTasks] = useState<PlannerTask[]>([]);
   const [loading, setLoading] = useState(false);
   const [saving, setSaving] = useState(false);
@@ -933,6 +934,7 @@ export function PlannerApp() {
   function changeDate(date: Date) {
     setCurrentDate(date);
     setDisplayDate(date);
+    setWeekScrollRequestKey((current) => current + 1);
   }
 
   function toggleStatus(status: string) {
@@ -1488,6 +1490,7 @@ export function PlannerApp() {
       {view === "week" ? (
         <WeekView
           currentDate={currentDate}
+          scrollRequestKey={weekScrollRequestKey}
           tasks={statusVisibleTasks}
           editable={editable}
           showAllDayTasks={showAllDayTasks}
