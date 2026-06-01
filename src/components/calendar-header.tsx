@@ -1,6 +1,6 @@
 "use client";
 
-import { addDays, addMonths } from "date-fns";
+import { addDays, addMonths, startOfDay } from "date-fns";
 import { useEffect, useRef, useState } from "react";
 import {
   CalendarCheck,
@@ -20,7 +20,7 @@ import {
   Settings,
   Sun,
 } from "lucide-react";
-import { formatDateLabel, startOfPlannerWeek } from "@/lib/calendar";
+import { formatDateLabel } from "@/lib/calendar";
 import { IconButton } from "@/components/icon-button";
 import { appConfigKey } from "@/lib/storage";
 import type { InteractionMode, ThemeMode } from "@/lib/storage";
@@ -194,7 +194,7 @@ export function CalendarHeader({
   }
 
   function goToday() {
-    onDateChange(view === "week" ? startOfPlannerWeek(new Date()) : new Date());
+    onDateChange(view === "week" ? startOfDay(new Date()) : new Date());
   }
 
   return (

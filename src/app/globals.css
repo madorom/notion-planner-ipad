@@ -93,6 +93,7 @@ button {
 .week-time-scroll {
   height: min(936px, max(300px, calc(100dvh - 276px)));
   overscroll-behavior: contain;
+  scrollbar-gutter: stable;
 }
 
 .week-horizontal-scroll {

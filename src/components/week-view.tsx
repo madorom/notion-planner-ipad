@@ -56,6 +56,7 @@ const hours = Array.from(
 const TIME_AXIS_WIDTH = 72;
 const DATE_HEADER_HEIGHT = 84;
 const ALL_DAY_ROW_HEIGHT = 72;
+const GRID_SCROLLBAR_GUTTER = 10;
 const DRAG_START_DISTANCE = 8;
 const DRAG_SNAP_MINUTES = 15;
 const CREATE_HOLD_DELAY_MS = 260;
@@ -233,6 +234,10 @@ export function WeekView({
     width: `${(days.length / visibleDayCount) * 100}%`,
   };
   const gridTemplateColumns = `repeat(${days.length}, minmax(0, 1fr))`;
+  const alignedGridStyle = {
+    gridTemplateColumns,
+    paddingRight: GRID_SCROLLBAR_GUTTER,
+  };
   const horizontalScrollRef = useRef<HTMLDivElement | null>(null);
   const bottomHorizontalScrollRef = useRef<HTMLDivElement | null>(null);
   const gridRef = useRef<HTMLDivElement | null>(null);
@@ -244,6 +249,7 @@ export function WeekView({
   const isRepositioningRef = useRef(false);
   const isSyncingHorizontalScrollRef = useRef(false);
   const previousVisibleDayCountRef = useRef(visibleDayCount);
+  const previousCurrentDateKeyRef = useRef(format(anchorDate, "yyyy-MM-dd"));
   const lastWindowShiftAtRef = useRef(0);
   const lastVisibleDateKeyRef = useRef("");
   const dragSessionRef = useRef<DragSession | null>(null);
@@ -508,6 +514,7 @@ export function WeekView({
     }
 
     const columnWidth = columnWidthFor(horizontalScroll, days.length);
+    const currentDateKey = format(anchorDate, "yyyy-MM-dd");
 
     if (!initializedScrollRef.current) {
       horizontalScroll.scrollLeft = CONTINUOUS_PAST_DAYS * columnWidth;
@@ -522,8 +529,16 @@ export function WeekView({
       if (visibleDateIndex >= 0) {
         horizontalScroll.scrollLeft = visibleDateIndex * columnWidth;
       }
+    } else if (previousCurrentDateKeyRef.current !== currentDateKey) {
+      const currentDateIndex = days.findIndex(
+        (day) => format(day, "yyyy-MM-dd") === currentDateKey,
+      );
+      if (currentDateIndex >= 0) {
+        horizontalScroll.scrollLeft = currentDateIndex * columnWidth;
+      }
     }
     previousVisibleDayCountRef.current = visibleDayCount;
+    previousCurrentDateKeyRef.current = currentDateKey;
 
     syncHorizontalScrollbar(horizontalScroll.scrollLeft, horizontalScroll);
 
@@ -543,6 +558,7 @@ export function WeekView({
       isRepositioningRef.current = false;
     });
   }, [
+    anchorDate,
     currentDate,
     days,
     days.length,
@@ -701,7 +717,7 @@ export function WeekView({
           <div className="week-table" style={tableStyle}>
             <div
               className="grid border-b border-[color:var(--planner-border)] bg-[color:var(--planner-surface)]"
-              style={{ gridTemplateColumns }}
+              style={alignedGridStyle}
             >
               {days.map((day) => (
                 <div
@@ -724,7 +740,7 @@ export function WeekView({
             {showAllDayTasks ? (
               <div
                 className="grid border-b border-[color:var(--planner-border)] bg-[color:var(--planner-surface-muted)]"
-                style={{ gridTemplateColumns }}
+                style={alignedGridStyle}
               >
                 {days.map((day) => {
                   const allDayTasks = allDayTasksForDay(tasks, day);
