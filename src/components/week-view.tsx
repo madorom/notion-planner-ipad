@@ -31,7 +31,7 @@ import {
   hourLabel,
   tasksForDay,
 } from "@/lib/calendar";
-import type { PlannerTask } from "@/lib/types";
+import type { AllDayRowId, PlannerTask } from "@/lib/types";
 import { TaskCard } from "@/components/task-card";
 import { clamp } from "@/lib/utils";
 
@@ -41,9 +41,11 @@ type WeekViewProps = {
   tasks: PlannerTask[];
   editable: boolean;
   showAllDayTasks: boolean;
+  hiddenAllDayRowIds: AllDayRowId[];
   splitAllDayNotionConfigIds: string[];
   weekVisibleDays: number;
   onToggleAllDayTasks: () => void;
+  onToggleAllDayRow: (rowId: AllDayRowId) => void;
   onCreate: (start: Date, end: Date) => void;
   onEdit: (task: PlannerTask) => void;
   onDateChange: (date: Date) => void;
@@ -58,6 +60,7 @@ const hours = Array.from(
 const TIME_AXIS_WIDTH = 72;
 const DATE_HEADER_HEIGHT = 84;
 const ALL_DAY_ROW_HEIGHT = 72;
+const ALL_DAY_COLLAPSED_ROW_HEIGHT = 34;
 const GRID_SCROLLBAR_GUTTER = 10;
 const TIMED_TASK_GAP = 4;
 const MIN_TIMED_TASK_HEIGHT = 18;
@@ -104,6 +107,11 @@ type CreateHoldSession = {
   startClientX: number;
   startClientY: number;
   timer: ReturnType<typeof setTimeout>;
+};
+
+type AllDayRow = {
+  id: AllDayRowId;
+  label: string;
 };
 
 function dateAtMinute(day: Date, totalMinutes: number) {
@@ -217,9 +225,11 @@ export function WeekView({
   tasks,
   editable,
   showAllDayTasks,
+  hiddenAllDayRowIds,
   splitAllDayNotionConfigIds,
   weekVisibleDays,
   onToggleAllDayTasks,
+  onToggleAllDayRow,
   onCreate,
   onEdit,
   onDateChange,
@@ -247,7 +257,19 @@ export function WeekView({
   );
   const showSplitAllDayRow =
     showAllDayTasks && splitAllDayNotionConfigSet.size > 0;
-  const allDayRowLabels = showSplitAllDayRow ? ["終日", "DB終日"] : ["終日"];
+  const hiddenAllDayRowSet = useMemo(
+    () => new Set(hiddenAllDayRowIds),
+    [hiddenAllDayRowIds],
+  );
+  const allDayRows = useMemo<AllDayRow[]>(() => {
+    const rows: AllDayRow[] = [{ id: "default", label: "終日" }];
+
+    if (showSplitAllDayRow) {
+      rows.push({ id: "split", label: "DB終日" });
+    }
+
+    return rows;
+  }, [showSplitAllDayRow]);
   const tableStyle = {
     width: `${(days.length / visibleDayCount) * 100}%`,
   };
@@ -281,10 +303,6 @@ export function WeekView({
     (day: Date) => {
       const allDayTasks = allDayTasksForDay(tasks, day);
 
-      if (!showSplitAllDayRow) {
-        return [allDayTasks];
-      }
-
       const splitTasks = allDayTasks.filter(
         (task) =>
           task.source === "notion" &&
@@ -298,7 +316,10 @@ export function WeekView({
           !splitAllDayNotionConfigSet.has(task.notionDataSourceId),
       );
 
-      return [mainTasks, splitTasks];
+      return {
+        default: showSplitAllDayRow ? mainTasks : allDayTasks,
+        split: showSplitAllDayRow ? splitTasks : [],
+      } satisfies Record<AllDayRowId, PlannerTask[]>;
     },
     [showSplitAllDayRow, splitAllDayNotionConfigSet, tasks],
   );
@@ -617,6 +638,7 @@ export function WeekView({
     days.length,
     reportVisibleDate,
     scrollRequestKey,
+    hiddenAllDayRowIds,
     showAllDayTasks,
     showSplitAllDayRow,
     visibleDayCount,
@@ -738,15 +760,35 @@ export function WeekView({
             </button>
           </div>
           {showAllDayTasks
-            ? allDayRowLabels.map((label) => (
-                <div
-                  key={`fixed-${label}`}
-                  className="border-b border-r border-[color:var(--planner-border)] bg-[color:var(--planner-surface-muted)] px-2 py-3 text-right text-xs font-bold text-[color:var(--planner-soft)]"
-                  style={{ height: ALL_DAY_ROW_HEIGHT }}
-                >
-                  {label}
-                </div>
-              ))
+            ? allDayRows.map((row) => {
+                const rowHidden = hiddenAllDayRowSet.has(row.id);
+
+                return (
+                  <div
+                    key={`fixed-${row.id}`}
+                    className="border-b border-r border-[color:var(--planner-border)] bg-[color:var(--planner-surface-muted)] p-1.5 text-right text-xs font-bold text-[color:var(--planner-soft)]"
+                    style={{
+                      height: rowHidden
+                        ? ALL_DAY_COLLAPSED_ROW_HEIGHT
+                        : ALL_DAY_ROW_HEIGHT,
+                    }}
+                  >
+                    <button
+                      type="button"
+                      aria-label={`${row.label}行を${rowHidden ? "表示" : "非表示"}`}
+                      onClick={() => onToggleAllDayRow(row.id)}
+                      className="pointer-events-auto inline-flex min-h-7 max-w-full items-center justify-end gap-1 rounded-md px-1.5 transition active:scale-[0.98]"
+                    >
+                      {rowHidden ? (
+                        <ChevronRight className="h-3.5 w-3.5 shrink-0" />
+                      ) : (
+                        <ChevronDown className="h-3.5 w-3.5 shrink-0" />
+                      )}
+                      <span className="truncate">{row.label}</span>
+                    </button>
+                  </div>
+                );
+              })
             : null}
           <div className="week-time-scroll overflow-hidden border-r border-[color:var(--planner-border)] bg-[color:var(--planner-surface-muted)]">
             <div
@@ -796,51 +838,64 @@ export function WeekView({
             </div>
 
             {showAllDayTasks
-              ? allDayRowLabels.map((label, rowIndex) => (
-                  <div
-                    key={`all-day-row-${label}`}
-                    className="grid border-b border-[color:var(--planner-border)] bg-[color:var(--planner-surface-muted)]"
-                    style={alignedGridStyle}
-                  >
-                    {days.map((day) => {
-                      const allDayRows = allDayRowsForDay(day);
-                      const rowTasks = allDayRows[rowIndex] ?? [];
-                      const visibleAllDayTasks = rowTasks.slice(0, 3);
-                      const hiddenAllDayCount =
-                        rowTasks.length - visibleAllDayTasks.length;
+              ? allDayRows.map((row) => {
+                  const rowHidden = hiddenAllDayRowSet.has(row.id);
+                  const rowHeight = rowHidden
+                    ? ALL_DAY_COLLAPSED_ROW_HEIGHT
+                    : ALL_DAY_ROW_HEIGHT;
 
-                      return (
-                        <div
-                          key={`all-day-${rowIndex}-${day.toISOString()}`}
-                          className={`border-r border-[color:var(--planner-border)] p-2 last:border-r-0 ${
-                            isSameDay(day, new Date()) ? "bg-mint-500/10" : ""
-                          }`}
-                          style={{ height: ALL_DAY_ROW_HEIGHT }}
-                        >
+                  return (
+                    <div
+                      key={`all-day-row-${row.id}`}
+                      className="grid border-b border-[color:var(--planner-border)] bg-[color:var(--planner-surface-muted)]"
+                      style={alignedGridStyle}
+                    >
+                      {days.map((day) => {
+                        const allDayRows = allDayRowsForDay(day);
+                        const rowTasks = rowHidden
+                          ? []
+                          : (allDayRows[row.id] ?? []);
+                        const visibleAllDayTasks = rowTasks.slice(0, 3);
+                        const hiddenAllDayCount =
+                          rowTasks.length - visibleAllDayTasks.length;
+
+                        return (
                           <div
-                            className="grid gap-1.5 overflow-y-auto pr-1 planner-scroll"
-                            style={{ maxHeight: ALL_DAY_ROW_HEIGHT - 16 }}
+                            key={`all-day-${row.id}-${day.toISOString()}`}
+                            className={`border-r border-[color:var(--planner-border)] p-2 last:border-r-0 ${
+                              isSameDay(day, new Date()) ? "bg-mint-500/10" : ""
+                            }`}
+                            style={{ height: rowHeight }}
                           >
-                            {visibleAllDayTasks.map((task) => (
-                              <TaskCard
-                                key={task.id}
-                                task={task}
-                                compact
-                                readOnly={!editable && task.source !== "google"}
-                                onClick={handleTaskClick}
-                              />
-                            ))}
-                            {hiddenAllDayCount > 0 ? (
-                              <div className="rounded-md bg-[color:var(--planner-surface)] px-2 py-1 text-xs font-bold text-[color:var(--planner-soft)]">
-                                +{hiddenAllDayCount}件
+                            {rowHidden ? null : (
+                              <div
+                                className="grid gap-1.5 overflow-y-auto pr-1 planner-scroll"
+                                style={{ maxHeight: ALL_DAY_ROW_HEIGHT - 16 }}
+                              >
+                                {visibleAllDayTasks.map((task) => (
+                                  <TaskCard
+                                    key={task.id}
+                                    task={task}
+                                    compact
+                                    readOnly={
+                                      !editable && task.source !== "google"
+                                    }
+                                    onClick={handleTaskClick}
+                                  />
+                                ))}
+                                {hiddenAllDayCount > 0 ? (
+                                  <div className="rounded-md bg-[color:var(--planner-surface)] px-2 py-1 text-xs font-bold text-[color:var(--planner-soft)]">
+                                    +{hiddenAllDayCount}件
+                                  </div>
+                                ) : null}
                               </div>
-                            ) : null}
+                            )}
                           </div>
-                        </div>
-                      );
-                    })}
-                  </div>
-                ))
+                        );
+                      })}
+                    </div>
+                  );
+                })
               : null}
 
             <div

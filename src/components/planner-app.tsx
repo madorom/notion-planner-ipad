@@ -20,6 +20,7 @@ import {
   loadConfig,
   loadGoogleCalendarColors,
   loadGoogleCalendarIds,
+  loadHiddenAllDayRowIds,
   loadHiddenStatuses,
   loadInteractionMode,
   loadKnownConfigs,
@@ -31,6 +32,7 @@ import {
   saveConfig,
   saveGoogleCalendarColors,
   saveGoogleCalendarIds,
+  saveHiddenAllDayRowIds,
   saveHiddenStatuses,
   saveInteractionMode,
   saveKnownConfig,
@@ -43,6 +45,7 @@ import {
   type ThemeMode,
 } from "@/lib/storage";
 import type {
+  AllDayRowId,
   AppConfig,
   GoogleCalendarOption,
   GoogleUserProfile,
@@ -176,6 +179,9 @@ export function PlannerApp() {
   const [summaryTask, setSummaryTask] = useState<PlannerTask | null>(null);
   const [hiddenStatuses, setHiddenStatuses] = useState<string[]>([]);
   const [showAllDayTasks, setShowAllDayTasks] = useState(true);
+  const [hiddenAllDayRowIds, setHiddenAllDayRowIds] = useState<AllDayRowId[]>(
+    [],
+  );
   const [splitAllDayNotionConfigIds, setSplitAllDayNotionConfigIds] = useState<
     string[]
   >([]);
@@ -248,6 +254,7 @@ export function PlannerApp() {
       setSetupOpen(!stored);
       setHiddenStatuses(loadHiddenStatuses());
       setShowAllDayTasks(loadShowAllDayTasks());
+      setHiddenAllDayRowIds(loadHiddenAllDayRowIds());
       setWeekVisibleDays(loadWeekVisibleDays());
       setThemeMode(nextThemeMode);
       setInteractionMode(loadInteractionMode());
@@ -456,6 +463,7 @@ export function PlannerApp() {
           ? validSelectedConfigIds
           : fallbackSelectedConfigIds,
       splitAllDayNotionDataSourceIds: validSplitAllDayConfigIds,
+      hiddenAllDayRowIds,
       hiddenStatuses,
       showAllDayTasks,
       weekVisibleDays,
@@ -467,6 +475,7 @@ export function PlannerApp() {
   }, [
     config,
     googleCalendarColors,
+    hiddenAllDayRowIds,
     hiddenStatuses,
     interactionMode,
     knownNotionConfigs,
@@ -519,6 +528,7 @@ export function PlannerApp() {
     }
 
     saveHiddenStatuses(settings.hiddenStatuses);
+    saveHiddenAllDayRowIds(settings.hiddenAllDayRowIds);
     saveSelectedNotionConfigIds(nextSelectedConfigIds);
     saveSplitAllDayNotionConfigIds(splitAllDayConfigIds);
     saveShowAllDayTasks(settings.showAllDayTasks);
@@ -534,6 +544,7 @@ export function PlannerApp() {
     setSplitAllDayNotionConfigIds(splitAllDayConfigIds);
     setSetupOpen(!activeConfig);
     setHiddenStatuses(settings.hiddenStatuses);
+    setHiddenAllDayRowIds(settings.hiddenAllDayRowIds);
     setShowAllDayTasks(settings.showAllDayTasks);
     setWeekVisibleDays(settings.weekVisibleDays);
     setThemeMode(settings.themeMode);
@@ -871,6 +882,7 @@ export function PlannerApp() {
     config,
     googleCalendarColors,
     googleSession.connected,
+    hiddenAllDayRowIds,
     hiddenStatuses,
     interactionMode,
     knownNotionConfigs,
@@ -988,6 +1000,16 @@ export function PlannerApp() {
     setShowAllDayTasks((current) => {
       const next = !current;
       saveShowAllDayTasks(next);
+      return next;
+    });
+  }
+
+  function toggleAllDayRow(rowId: AllDayRowId) {
+    setHiddenAllDayRowIds((current) => {
+      const next = current.includes(rowId)
+        ? current.filter((item) => item !== rowId)
+        : [...current, rowId];
+      saveHiddenAllDayRowIds(next);
       return next;
     });
   }
@@ -1552,9 +1574,11 @@ export function PlannerApp() {
           tasks={statusVisibleTasks}
           editable={editable}
           showAllDayTasks={showAllDayTasks}
+          hiddenAllDayRowIds={hiddenAllDayRowIds}
           splitAllDayNotionConfigIds={visibleSplitAllDayNotionConfigIds}
           weekVisibleDays={weekVisibleDays}
           onToggleAllDayTasks={toggleAllDayTasks}
+          onToggleAllDayRow={toggleAllDayRow}
           onCreate={(start, end) => setModal({ mode: "create", start, end })}
           onEdit={showTaskSummary}
           onDateChange={setCurrentDate}

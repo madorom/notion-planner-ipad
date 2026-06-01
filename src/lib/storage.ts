@@ -1,4 +1,4 @@
-import type { AppConfig } from "@/lib/types";
+import type { AllDayRowId, AppConfig } from "@/lib/types";
 
 const CONFIG_KEY = "notion-planner-ipad:v1";
 const CONFIGS_KEY = "notion-planner-ipad:configs:v1";
@@ -8,6 +8,8 @@ const SELECTED_NOTION_CONFIG_IDS_KEY =
 const THEME_MODE_KEY = "notion-planner-ipad:theme:v1";
 const INTERACTION_MODE_KEY = "notion-planner-ipad:interaction-mode:v1";
 const SHOW_ALL_DAY_TASKS_KEY = "notion-planner-ipad:show-all-day:v1";
+const HIDDEN_ALL_DAY_ROW_IDS_KEY =
+  "notion-planner-ipad:hidden-all-day-rows:v1";
 const SPLIT_ALL_DAY_NOTION_CONFIG_IDS_KEY =
   "notion-planner-ipad:split-all-day-notion-configs:v1";
 const WEEK_VISIBLE_DAYS_KEY = "notion-planner-ipad:week-visible-days:v1";
@@ -209,6 +211,36 @@ export function saveShowAllDayTasks(showAllDayTasks: boolean) {
   window.localStorage.setItem(
     SHOW_ALL_DAY_TASKS_KEY,
     showAllDayTasks ? "true" : "false",
+  );
+}
+
+function isAllDayRowId(value: unknown): value is AllDayRowId {
+  return value === "default" || value === "split";
+}
+
+export function loadHiddenAllDayRowIds() {
+  if (typeof window === "undefined") {
+    return [];
+  }
+
+  const raw = window.localStorage.getItem(HIDDEN_ALL_DAY_ROW_IDS_KEY);
+  if (!raw) {
+    return [];
+  }
+
+  try {
+    const parsed = JSON.parse(raw);
+    return Array.isArray(parsed) ? parsed.filter(isAllDayRowId) : [];
+  } catch {
+    window.localStorage.removeItem(HIDDEN_ALL_DAY_ROW_IDS_KEY);
+    return [];
+  }
+}
+
+export function saveHiddenAllDayRowIds(rowIds: AllDayRowId[]) {
+  window.localStorage.setItem(
+    HIDDEN_ALL_DAY_ROW_IDS_KEY,
+    JSON.stringify(Array.from(new Set(rowIds))),
   );
 }
 

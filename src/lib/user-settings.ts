@@ -1,5 +1,6 @@
 import { createHash } from "crypto";
 import type {
+  AllDayRowId,
   AppConfig,
   GoogleUserProfile,
   NotionProperty,
@@ -167,6 +168,14 @@ function stringArray(value: unknown) {
     : [];
 }
 
+function allDayRowArray(value: unknown) {
+  return Array.isArray(value)
+    ? value.filter(
+        (item): item is AllDayRowId => item === "default" || item === "split",
+      )
+    : [];
+}
+
 function hexColorMap(value: unknown) {
   if (!isRecord(value)) {
     return {};
@@ -205,6 +214,7 @@ export function sanitizeUserSettings(value: unknown): UserSettings | null {
     splitAllDayNotionDataSourceIds: stringArray(
       value.splitAllDayNotionDataSourceIds,
     ),
+    hiddenAllDayRowIds: allDayRowArray(value.hiddenAllDayRowIds),
     hiddenStatuses: stringArray(value.hiddenStatuses),
     showAllDayTasks: value.showAllDayTasks !== false,
     weekVisibleDays: clampWeekVisibleDays(value.weekVisibleDays),

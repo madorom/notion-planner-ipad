@@ -144,11 +144,14 @@ export type NotionDatabaseOption = {
   name: string;
 };
 
+export type AllDayRowId = "default" | "split";
+
 export type UserSettings = {
   notionConfigs: AppConfig[];
   activeNotionDataSourceId?: string | null;
   selectedNotionDataSourceIds: string[];
   splitAllDayNotionDataSourceIds: string[];
+  hiddenAllDayRowIds: AllDayRowId[];
   hiddenStatuses: string[];
   showAllDayTasks: boolean;
   weekVisibleDays: number;
