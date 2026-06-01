@@ -1,4 +1,4 @@
-import type { AllDayRowId, AppConfig } from "@/lib/types";
+import type { AllDayRowHeights, AllDayRowId, AppConfig } from "@/lib/types";
 
 const CONFIG_KEY = "notion-planner-ipad:v1";
 const CONFIGS_KEY = "notion-planner-ipad:configs:v1";
@@ -10,6 +10,7 @@ const INTERACTION_MODE_KEY = "notion-planner-ipad:interaction-mode:v1";
 const SHOW_ALL_DAY_TASKS_KEY = "notion-planner-ipad:show-all-day:v1";
 const HIDDEN_ALL_DAY_ROW_IDS_KEY =
   "notion-planner-ipad:hidden-all-day-rows:v1";
+const ALL_DAY_ROW_HEIGHTS_KEY = "notion-planner-ipad:all-day-row-heights:v1";
 const SPLIT_ALL_DAY_NOTION_CONFIG_IDS_KEY =
   "notion-planner-ipad:split-all-day-notion-configs:v1";
 const WEEK_VISIBLE_DAYS_KEY = "notion-planner-ipad:week-visible-days:v1";
@@ -24,6 +25,9 @@ export type InteractionMode = "view" | "change";
 export const DEFAULT_WEEK_VISIBLE_DAYS = 7;
 export const MIN_WEEK_VISIBLE_DAYS = 1;
 export const MAX_WEEK_VISIBLE_DAYS = 7;
+export const DEFAULT_ALL_DAY_ROW_HEIGHT = 72;
+export const MIN_ALL_DAY_ROW_HEIGHT = 44;
+export const MAX_ALL_DAY_ROW_HEIGHT = 220;
 
 export function clampWeekVisibleDays(value: unknown) {
   const parsed =
@@ -40,6 +44,24 @@ export function clampWeekVisibleDays(value: unknown) {
   return Math.min(
     MAX_WEEK_VISIBLE_DAYS,
     Math.max(MIN_WEEK_VISIBLE_DAYS, Math.round(parsed)),
+  );
+}
+
+export function clampAllDayRowHeight(value: unknown) {
+  const parsed =
+    typeof value === "number"
+      ? value
+      : typeof value === "string"
+        ? Number(value)
+        : DEFAULT_ALL_DAY_ROW_HEIGHT;
+
+  if (!Number.isFinite(parsed)) {
+    return DEFAULT_ALL_DAY_ROW_HEIGHT;
+  }
+
+  return Math.min(
+    MAX_ALL_DAY_ROW_HEIGHT,
+    Math.max(MIN_ALL_DAY_ROW_HEIGHT, Math.round(parsed)),
   );
 }
 
@@ -241,6 +263,51 @@ export function saveHiddenAllDayRowIds(rowIds: AllDayRowId[]) {
   window.localStorage.setItem(
     HIDDEN_ALL_DAY_ROW_IDS_KEY,
     JSON.stringify(Array.from(new Set(rowIds))),
+  );
+}
+
+function sanitizeAllDayRowHeights(value: unknown): AllDayRowHeights {
+  if (!value || typeof value !== "object" || Array.isArray(value)) {
+    return {};
+  }
+
+  const entries = (["default", "split"] as const)
+    .map((rowId) => {
+      const height = (value as Partial<Record<AllDayRowId, unknown>>)[rowId];
+
+      if (height === undefined || height === null) {
+        return null;
+      }
+
+      return [rowId, clampAllDayRowHeight(height)] as const;
+    })
+    .filter((entry): entry is readonly [AllDayRowId, number] => entry !== null);
+
+  return Object.fromEntries(entries);
+}
+
+export function loadAllDayRowHeights() {
+  if (typeof window === "undefined") {
+    return {};
+  }
+
+  const raw = window.localStorage.getItem(ALL_DAY_ROW_HEIGHTS_KEY);
+  if (!raw) {
+    return {};
+  }
+
+  try {
+    return sanitizeAllDayRowHeights(JSON.parse(raw));
+  } catch {
+    window.localStorage.removeItem(ALL_DAY_ROW_HEIGHTS_KEY);
+    return {};
+  }
+}
+
+export function saveAllDayRowHeights(rowHeights: AllDayRowHeights) {
+  window.localStorage.setItem(
+    ALL_DAY_ROW_HEIGHTS_KEY,
+    JSON.stringify(sanitizeAllDayRowHeights(rowHeights)),
   );
 }
 

@@ -31,7 +31,11 @@ import {
   hourLabel,
   tasksForDay,
 } from "@/lib/calendar";
-import type { AllDayRowId, PlannerTask } from "@/lib/types";
+import {
+  DEFAULT_ALL_DAY_ROW_HEIGHT,
+  clampAllDayRowHeight,
+} from "@/lib/storage";
+import type { AllDayRowHeights, AllDayRowId, PlannerTask } from "@/lib/types";
 import { TaskCard } from "@/components/task-card";
 import { clamp } from "@/lib/utils";
 
@@ -42,10 +46,12 @@ type WeekViewProps = {
   editable: boolean;
   showAllDayTasks: boolean;
   hiddenAllDayRowIds: AllDayRowId[];
+  allDayRowHeights: AllDayRowHeights;
   splitAllDayNotionConfigIds: string[];
   weekVisibleDays: number;
   onToggleAllDayTasks: () => void;
   onToggleAllDayRow: (rowId: AllDayRowId) => void;
+  onAllDayRowHeightChange: (rowId: AllDayRowId, height: number) => void;
   onCreate: (start: Date, end: Date) => void;
   onEdit: (task: PlannerTask) => void;
   onDateChange: (date: Date) => void;
@@ -59,7 +65,6 @@ const hours = Array.from(
 );
 const TIME_AXIS_WIDTH = 72;
 const DATE_HEADER_HEIGHT = 84;
-const ALL_DAY_ROW_HEIGHT = 72;
 const ALL_DAY_COLLAPSED_ROW_HEIGHT = 34;
 const GRID_SCROLLBAR_GUTTER = 10;
 const TIMED_TASK_GAP = 4;
@@ -107,6 +112,13 @@ type CreateHoldSession = {
   startClientX: number;
   startClientY: number;
   timer: ReturnType<typeof setTimeout>;
+};
+
+type AllDayResizeSession = {
+  rowId: AllDayRowId;
+  pointerId: number;
+  startClientY: number;
+  startHeight: number;
 };
 
 type AllDayRow = {
@@ -226,10 +238,12 @@ export function WeekView({
   editable,
   showAllDayTasks,
   hiddenAllDayRowIds,
+  allDayRowHeights,
   splitAllDayNotionConfigIds,
   weekVisibleDays,
   onToggleAllDayTasks,
   onToggleAllDayRow,
+  onAllDayRowHeightChange,
   onCreate,
   onEdit,
   onDateChange,
@@ -296,8 +310,17 @@ export function WeekView({
   const dragSessionRef = useRef<DragSession | null>(null);
   const dragPreviewRef = useRef<DragPreview | null>(null);
   const createHoldSessionRef = useRef<CreateHoldSession | null>(null);
+  const allDayResizeSessionRef = useRef<AllDayResizeSession | null>(null);
   const suppressClickUntilRef = useRef(0);
   const [dragPreview, setDragPreview] = useState<DragPreview | null>(null);
+
+  const allDayRowHeight = useCallback(
+    (rowId: AllDayRowId) =>
+      clampAllDayRowHeight(
+        allDayRowHeights[rowId] ?? DEFAULT_ALL_DAY_ROW_HEIGHT,
+      ),
+    [allDayRowHeights],
+  );
 
   const allDayRowsForDay = useCallback(
     (day: Date) => {
@@ -392,6 +415,19 @@ export function WeekView({
   }, [cancelCreateHold, editable]);
 
   useEffect(() => {
+    function handleAllDayResizeMove(event: PointerEvent) {
+      const session = allDayResizeSessionRef.current;
+      if (!session || event.pointerId !== session.pointerId) {
+        return;
+      }
+
+      event.preventDefault();
+      onAllDayRowHeightChange(
+        session.rowId,
+        session.startHeight + event.clientY - session.startClientY,
+      );
+    }
+
     function handlePointerMove(event: PointerEvent) {
       if (!editable) {
         return;
@@ -444,6 +480,12 @@ export function WeekView({
     }
 
     function finishPointerDrag(event: PointerEvent) {
+      const resizeSession = allDayResizeSessionRef.current;
+      if (resizeSession?.pointerId === event.pointerId) {
+        allDayResizeSessionRef.current = null;
+        suppressClickUntilRef.current = Date.now() + 250;
+      }
+
       const createSession = createHoldSessionRef.current;
       if (createSession?.pointerId === event.pointerId) {
         cancelCreateHold();
@@ -467,6 +509,7 @@ export function WeekView({
       onMoveTask(session.task, preview.start, preview.end);
     }
 
+    window.addEventListener("pointermove", handleAllDayResizeMove, true);
     window.addEventListener("pointermove", handlePointerMove, true);
     window.addEventListener("pointermove", handleCreateHoldMove, true);
     window.addEventListener("pointerup", finishPointerDrag, true);
@@ -474,12 +517,19 @@ export function WeekView({
 
     return () => {
       cancelCreateHold();
+      window.removeEventListener("pointermove", handleAllDayResizeMove, true);
       window.removeEventListener("pointermove", handlePointerMove, true);
       window.removeEventListener("pointermove", handleCreateHoldMove, true);
       window.removeEventListener("pointerup", finishPointerDrag, true);
       window.removeEventListener("pointercancel", finishPointerDrag, true);
     };
-  }, [cancelCreateHold, dragPointToPreview, editable, onMoveTask]);
+  }, [
+    cancelCreateHold,
+    dragPointToPreview,
+    editable,
+    onAllDayRowHeightChange,
+    onMoveTask,
+  ]);
 
   function shiftDateWindow(direction: -1 | 1, columnWidth: number) {
     const now = Date.now();
@@ -729,6 +779,26 @@ export function WeekView({
     onEdit(task);
   }
 
+  function beginAllDayRowResize(
+    rowId: AllDayRowId,
+    height: number,
+    event: ReactPointerEvent<HTMLDivElement>,
+  ) {
+    if (!event.isPrimary || event.button !== 0) {
+      return;
+    }
+
+    event.preventDefault();
+    event.stopPropagation();
+    event.currentTarget.setPointerCapture(event.pointerId);
+    allDayResizeSessionRef.current = {
+      rowId,
+      pointerId: event.pointerId,
+      startClientY: event.clientY,
+      startHeight: height,
+    };
+  }
+
   return (
     <section className="relative isolate mx-auto max-w-[1500px] px-4 py-4 md:px-6">
       <div className="relative overflow-hidden rounded-xl border border-[color:var(--planner-border)] bg-[color:var(--planner-surface)] shadow-planner">
@@ -762,16 +832,15 @@ export function WeekView({
           {showAllDayTasks
             ? allDayRows.map((row) => {
                 const rowHidden = hiddenAllDayRowSet.has(row.id);
+                const rowHeight = rowHidden
+                  ? ALL_DAY_COLLAPSED_ROW_HEIGHT
+                  : allDayRowHeight(row.id);
 
                 return (
                   <div
                     key={`fixed-${row.id}`}
-                    className="border-b border-r border-[color:var(--planner-border)] bg-[color:var(--planner-surface-muted)] p-1.5 text-right text-xs font-bold text-[color:var(--planner-soft)]"
-                    style={{
-                      height: rowHidden
-                        ? ALL_DAY_COLLAPSED_ROW_HEIGHT
-                        : ALL_DAY_ROW_HEIGHT,
-                    }}
+                    className="relative border-b border-r border-[color:var(--planner-border)] bg-[color:var(--planner-surface-muted)] p-1.5 text-right text-xs font-bold text-[color:var(--planner-soft)]"
+                    style={{ height: rowHeight }}
                   >
                     <button
                       type="button"
@@ -786,6 +855,19 @@ export function WeekView({
                       )}
                       <span className="truncate">{row.label}</span>
                     </button>
+                    {rowHidden ? null : (
+                      <div
+                        role="separator"
+                        aria-orientation="horizontal"
+                        aria-label={`${row.label}行の高さを変更`}
+                        onPointerDown={(event) =>
+                          beginAllDayRowResize(row.id, rowHeight, event)
+                        }
+                        className="pointer-events-auto absolute inset-x-1 bottom-0 flex h-4 cursor-row-resize touch-none items-end justify-center pb-0.5"
+                      >
+                        <span className="h-1 w-9 rounded-full bg-[color:var(--planner-border)]" />
+                      </div>
+                    )}
                   </div>
                 );
               })
@@ -842,7 +924,7 @@ export function WeekView({
                   const rowHidden = hiddenAllDayRowSet.has(row.id);
                   const rowHeight = rowHidden
                     ? ALL_DAY_COLLAPSED_ROW_HEIGHT
-                    : ALL_DAY_ROW_HEIGHT;
+                    : allDayRowHeight(row.id);
 
                   return (
                     <div
@@ -870,7 +952,7 @@ export function WeekView({
                             {rowHidden ? null : (
                               <div
                                 className="grid gap-1.5 overflow-y-auto pr-1 planner-scroll"
-                                style={{ maxHeight: ALL_DAY_ROW_HEIGHT - 16 }}
+                                style={{ maxHeight: rowHeight - 16 }}
                               >
                                 {visibleAllDayTasks.map((task) => (
                                   <TaskCard

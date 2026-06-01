@@ -1,5 +1,6 @@
 import { createHash } from "crypto";
 import type {
+  AllDayRowHeights,
   AllDayRowId,
   AppConfig,
   GoogleUserProfile,
@@ -7,7 +8,7 @@ import type {
   PropertyMapping,
   UserSettings,
 } from "@/lib/types";
-import { clampWeekVisibleDays } from "@/lib/storage";
+import { clampAllDayRowHeight, clampWeekVisibleDays } from "@/lib/storage";
 
 type UpstashResponse<T> = {
   result?: T;
@@ -176,6 +177,26 @@ function allDayRowArray(value: unknown) {
     : [];
 }
 
+function allDayRowHeightMap(value: unknown): AllDayRowHeights {
+  if (!isRecord(value)) {
+    return {};
+  }
+
+  const entries = (["default", "split"] as const)
+    .map((rowId) => {
+      const height = value[rowId];
+
+      if (height === undefined || height === null) {
+        return null;
+      }
+
+      return [rowId, clampAllDayRowHeight(height)] as const;
+    })
+    .filter((entry): entry is readonly [AllDayRowId, number] => entry !== null);
+
+  return Object.fromEntries(entries);
+}
+
 function hexColorMap(value: unknown) {
   if (!isRecord(value)) {
     return {};
@@ -215,6 +236,7 @@ export function sanitizeUserSettings(value: unknown): UserSettings | null {
       value.splitAllDayNotionDataSourceIds,
     ),
     hiddenAllDayRowIds: allDayRowArray(value.hiddenAllDayRowIds),
+    allDayRowHeights: allDayRowHeightMap(value.allDayRowHeights),
     hiddenStatuses: stringArray(value.hiddenStatuses),
     showAllDayTasks: value.showAllDayTasks !== false,
     weekVisibleDays: clampWeekVisibleDays(value.weekVisibleDays),

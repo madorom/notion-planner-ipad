@@ -145,6 +145,7 @@ export type NotionDatabaseOption = {
 };
 
 export type AllDayRowId = "default" | "split";
+export type AllDayRowHeights = Partial<Record<AllDayRowId, number>>;
 
 export type UserSettings = {
   notionConfigs: AppConfig[];
@@ -152,6 +153,7 @@ export type UserSettings = {
   selectedNotionDataSourceIds: string[];
   splitAllDayNotionDataSourceIds: string[];
   hiddenAllDayRowIds: AllDayRowId[];
+  allDayRowHeights: AllDayRowHeights;
   hiddenStatuses: string[];
   showAllDayTasks: boolean;
   weekVisibleDays: number;
