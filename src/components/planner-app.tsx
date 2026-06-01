@@ -16,6 +16,7 @@ import {
   clearConfig,
   applyThemeMode,
   appConfigKey,
+  clampWeekVisibleDays,
   loadConfig,
   loadGoogleCalendarColors,
   loadGoogleCalendarIds,
@@ -25,6 +26,7 @@ import {
   loadSelectedNotionConfigIds,
   loadShowAllDayTasks,
   loadThemeMode,
+  loadWeekVisibleDays,
   saveConfig,
   saveGoogleCalendarColors,
   saveGoogleCalendarIds,
@@ -34,6 +36,7 @@ import {
   saveSelectedNotionConfigIds,
   saveShowAllDayTasks,
   saveThemeMode,
+  saveWeekVisibleDays,
   type InteractionMode,
   type ThemeMode,
 } from "@/lib/storage";
@@ -170,6 +173,7 @@ export function PlannerApp() {
   const [summaryTask, setSummaryTask] = useState<PlannerTask | null>(null);
   const [hiddenStatuses, setHiddenStatuses] = useState<string[]>([]);
   const [showAllDayTasks, setShowAllDayTasks] = useState(true);
+  const [weekVisibleDays, setWeekVisibleDays] = useState(7);
   const [undoStack, setUndoStack] = useState<TaskHistoryAction[]>([]);
   const [redoStack, setRedoStack] = useState<TaskHistoryAction[]>([]);
   const [historyBusy, setHistoryBusy] = useState(false);
@@ -233,6 +237,7 @@ export function PlannerApp() {
       setSetupOpen(!stored);
       setHiddenStatuses(loadHiddenStatuses());
       setShowAllDayTasks(loadShowAllDayTasks());
+      setWeekVisibleDays(loadWeekVisibleDays());
       setThemeMode(nextThemeMode);
       setInteractionMode(loadInteractionMode());
       setSelectedGoogleCalendarIds(loadGoogleCalendarIds());
@@ -428,6 +433,7 @@ export function PlannerApp() {
           : fallbackSelectedConfigIds,
       hiddenStatuses,
       showAllDayTasks,
+      weekVisibleDays,
       themeMode,
       interactionMode,
       selectedGoogleCalendarIds,
@@ -443,6 +449,7 @@ export function PlannerApp() {
     selectedGoogleCalendarIds,
     showAllDayTasks,
     themeMode,
+    weekVisibleDays,
   ]);
 
   const applyUserSettings = useCallback((settings: UserSettings) => {
@@ -484,6 +491,7 @@ export function PlannerApp() {
     saveHiddenStatuses(settings.hiddenStatuses);
     saveSelectedNotionConfigIds(nextSelectedConfigIds);
     saveShowAllDayTasks(settings.showAllDayTasks);
+    saveWeekVisibleDays(settings.weekVisibleDays);
     saveThemeMode(settings.themeMode);
     saveInteractionMode(settings.interactionMode);
     saveGoogleCalendarIds(settings.selectedGoogleCalendarIds);
@@ -495,6 +503,7 @@ export function PlannerApp() {
     setSetupOpen(!activeConfig);
     setHiddenStatuses(settings.hiddenStatuses);
     setShowAllDayTasks(settings.showAllDayTasks);
+    setWeekVisibleDays(settings.weekVisibleDays);
     setThemeMode(settings.themeMode);
     setInteractionMode(settings.interactionMode);
     setSelectedGoogleCalendarIds(settings.selectedGoogleCalendarIds);
@@ -840,6 +849,7 @@ export function PlannerApp() {
     settingsSync.loaded,
     showAllDayTasks,
     themeMode,
+    weekVisibleDays,
   ]);
 
   useEffect(() => {
@@ -946,6 +956,12 @@ export function PlannerApp() {
       saveShowAllDayTasks(next);
       return next;
     });
+  }
+
+  function changeWeekVisibleDays(dayCount: number) {
+    const next = clampWeekVisibleDays(dayCount);
+    setWeekVisibleDays(next);
+    saveWeekVisibleDays(next);
   }
 
   function toggleThemeMode() {
@@ -1431,6 +1447,7 @@ export function PlannerApp() {
         loading={loading}
         themeMode={themeMode}
         interactionMode={interactionMode}
+        weekVisibleDays={weekVisibleDays}
         notionConfigs={notionConfigs}
         selectedNotionConfigIds={selectedNotionConfigIds}
         googleConfigured={googleSession.configured}
@@ -1446,6 +1463,7 @@ export function PlannerApp() {
         onRefresh={fetchTasks}
         onToggleTheme={toggleThemeMode}
         onInteractionModeChange={changeInteractionMode}
+        onWeekVisibleDaysChange={changeWeekVisibleDays}
         onToggleNotionConfig={toggleNotionConfig}
         onShowAllNotionConfigs={showAllNotionConfigs}
         onToggleGoogleCalendar={toggleGoogleCalendar}
@@ -1473,6 +1491,7 @@ export function PlannerApp() {
           tasks={statusVisibleTasks}
           editable={editable}
           showAllDayTasks={showAllDayTasks}
+          weekVisibleDays={weekVisibleDays}
           onToggleAllDayTasks={toggleAllDayTasks}
           onCreate={(start, end) => setModal({ mode: "create", start, end })}
           onEdit={showTaskSummary}

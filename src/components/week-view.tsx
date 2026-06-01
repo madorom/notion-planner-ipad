@@ -40,6 +40,7 @@ type WeekViewProps = {
   tasks: PlannerTask[];
   editable: boolean;
   showAllDayTasks: boolean;
+  weekVisibleDays: number;
   onToggleAllDayTasks: () => void;
   onCreate: (start: Date, end: Date) => void;
   onEdit: (task: PlannerTask) => void;
@@ -53,7 +54,6 @@ const hours = Array.from(
   (_, index) => DAY_START_HOUR + index,
 );
 const TIME_AXIS_WIDTH = 72;
-const DAY_COLUMN_WIDTH = 132;
 const DATE_HEADER_HEIGHT = 84;
 const ALL_DAY_ROW_HEIGHT = 72;
 const DRAG_START_DISTANCE = 8;
@@ -198,7 +198,7 @@ function layoutTimedTasks(tasks: PlannerTask[]) {
 }
 
 function columnWidthFor(node: HTMLDivElement, dayCount: number) {
-  return Math.max(DAY_COLUMN_WIDTH, node.scrollWidth / dayCount);
+  return node.scrollWidth / dayCount;
 }
 
 export function WeekView({
@@ -206,6 +206,7 @@ export function WeekView({
   tasks,
   editable,
   showAllDayTasks,
+  weekVisibleDays,
   onToggleAllDayTasks,
   onCreate,
   onEdit,
@@ -223,12 +224,15 @@ export function WeekView({
     [anchorDate],
   );
   const bodyHeight = hours.length * HOUR_HEIGHT;
+  const visibleDayCount = clamp(weekVisibleDays, 1, 7);
   const allDayTaskCount = useMemo(
     () => tasks.filter((task) => task.isAllDay).length,
     [tasks],
   );
-  const tableMinWidth = days.length * DAY_COLUMN_WIDTH;
-  const gridTemplateColumns = `repeat(${days.length}, minmax(${DAY_COLUMN_WIDTH}px, 1fr))`;
+  const tableStyle = {
+    width: `${(days.length / visibleDayCount) * 100}%`,
+  };
+  const gridTemplateColumns = `repeat(${days.length}, minmax(0, 1fr))`;
   const horizontalScrollRef = useRef<HTMLDivElement | null>(null);
   const bottomHorizontalScrollRef = useRef<HTMLDivElement | null>(null);
   const gridRef = useRef<HTMLDivElement | null>(null);
@@ -239,6 +243,7 @@ export function WeekView({
   const pendingScrollAdjustmentRef = useRef(0);
   const isRepositioningRef = useRef(false);
   const isSyncingHorizontalScrollRef = useRef(false);
+  const previousVisibleDayCountRef = useRef(visibleDayCount);
   const lastWindowShiftAtRef = useRef(0);
   const lastVisibleDateKeyRef = useRef("");
   const dragSessionRef = useRef<DragSession | null>(null);
@@ -502,13 +507,23 @@ export function WeekView({
       return;
     }
 
+    const columnWidth = columnWidthFor(horizontalScroll, days.length);
+
     if (!initializedScrollRef.current) {
-      horizontalScroll.scrollLeft = CONTINUOUS_PAST_DAYS * DAY_COLUMN_WIDTH;
+      horizontalScroll.scrollLeft = CONTINUOUS_PAST_DAYS * columnWidth;
       initializedScrollRef.current = true;
     } else if (pendingScrollAdjustmentRef.current !== 0) {
       horizontalScroll.scrollLeft += pendingScrollAdjustmentRef.current;
       pendingScrollAdjustmentRef.current = 0;
+    } else if (previousVisibleDayCountRef.current !== visibleDayCount) {
+      const visibleDateIndex = days.findIndex(
+        (day) => format(day, "yyyy-MM-dd") === lastVisibleDateKeyRef.current,
+      );
+      if (visibleDateIndex >= 0) {
+        horizontalScroll.scrollLeft = visibleDateIndex * columnWidth;
+      }
     }
+    previousVisibleDayCountRef.current = visibleDayCount;
 
     syncHorizontalScrollbar(horizontalScroll.scrollLeft, horizontalScroll);
 
@@ -527,7 +542,14 @@ export function WeekView({
       );
       isRepositioningRef.current = false;
     });
-  }, [currentDate, days.length, reportVisibleDate, showAllDayTasks]);
+  }, [
+    currentDate,
+    days,
+    days.length,
+    reportVisibleDate,
+    showAllDayTasks,
+    visibleDayCount,
+  ]);
 
   function beginCreateHold(day: Date, event: ReactPointerEvent<HTMLDivElement>) {
     if (
@@ -676,7 +698,7 @@ export function WeekView({
           onScroll={handleHorizontalScroll}
           style={{ marginLeft: TIME_AXIS_WIDTH }}
         >
-          <div className="week-table" style={{ minWidth: tableMinWidth }}>
+          <div className="week-table" style={tableStyle}>
             <div
               className="grid border-b border-[color:var(--planner-border)] bg-[color:var(--planner-surface)]"
               style={{ gridTemplateColumns }}
@@ -828,7 +850,7 @@ export function WeekView({
             className="planner-scroll week-bottom-horizontal-scroll overflow-x-auto overflow-y-hidden"
             onScroll={handleBottomHorizontalScroll}
           >
-            <div style={{ width: tableMinWidth, height: 1 }} />
+            <div style={{ ...tableStyle, height: 1 }} />
           </div>
         </div>
       </div>

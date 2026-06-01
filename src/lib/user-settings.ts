@@ -6,6 +6,7 @@ import type {
   PropertyMapping,
   UserSettings,
 } from "@/lib/types";
+import { clampWeekVisibleDays } from "@/lib/storage";
 
 type UpstashResponse<T> = {
   result?: T;
@@ -203,6 +204,7 @@ export function sanitizeUserSettings(value: unknown): UserSettings | null {
     selectedNotionDataSourceIds: stringArray(value.selectedNotionDataSourceIds),
     hiddenStatuses: stringArray(value.hiddenStatuses),
     showAllDayTasks: value.showAllDayTasks !== false,
+    weekVisibleDays: clampWeekVisibleDays(value.weekVisibleDays),
     themeMode,
     interactionMode,
     selectedGoogleCalendarIds: stringArray(value.selectedGoogleCalendarIds),

@@ -150,6 +150,7 @@ export type UserSettings = {
   selectedNotionDataSourceIds: string[];
   hiddenStatuses: string[];
   showAllDayTasks: boolean;
+  weekVisibleDays: number;
   themeMode: "light" | "dark";
   interactionMode: "view" | "change";
   selectedGoogleCalendarIds: string[];

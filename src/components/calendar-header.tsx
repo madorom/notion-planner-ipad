@@ -37,6 +37,7 @@ type CalendarHeaderProps = {
   loading: boolean;
   themeMode: ThemeMode;
   interactionMode: InteractionMode;
+  weekVisibleDays: number;
   notionConfigs: AppConfig[];
   selectedNotionConfigIds: string[];
   googleConfigured: boolean;
@@ -52,6 +53,7 @@ type CalendarHeaderProps = {
   onRefresh: () => void;
   onToggleTheme: () => void;
   onInteractionModeChange: (mode: InteractionMode) => void;
+  onWeekVisibleDaysChange: (dayCount: number) => void;
   onToggleNotionConfig: (configId: string) => void;
   onShowAllNotionConfigs: () => void;
   onToggleGoogleCalendar: () => void;
@@ -98,6 +100,7 @@ export function CalendarHeader({
   loading,
   themeMode,
   interactionMode,
+  weekVisibleDays,
   notionConfigs,
   selectedNotionConfigIds,
   googleConfigured,
@@ -113,6 +116,7 @@ export function CalendarHeader({
   onRefresh,
   onToggleTheme,
   onInteractionModeChange,
+  onWeekVisibleDaysChange,
   onToggleNotionConfig,
   onShowAllNotionConfigs,
   onToggleGoogleCalendar,
@@ -205,7 +209,7 @@ export function CalendarHeader({
               Notion Planner
             </p>
             <h1 className="truncate text-lg font-bold leading-tight sm:text-2xl md:text-3xl">
-              {formatDateLabel(view, currentDate)}
+              {formatDateLabel(view, currentDate, weekVisibleDays)}
             </h1>
           </div>
         </div>
@@ -368,6 +372,38 @@ export function CalendarHeader({
                     <LogOut className="h-5 w-5" />
                     <span className="min-w-0 flex-1 truncate">ログアウト</span>
                   </button>
+                </div>
+
+                <div className="border-b border-[color:var(--planner-border)] py-3">
+                  <div className="mb-3 flex items-center justify-between gap-3">
+                    <p className="flex items-center gap-2 text-sm font-bold">
+                      <CalendarDays className="h-4 w-4" />
+                      表示日数
+                    </p>
+                    <span className="text-xs font-bold text-[color:var(--planner-soft)]">
+                      {weekVisibleDays}日
+                    </span>
+                  </div>
+                  <div className="grid grid-cols-7 gap-1.5">
+                    {Array.from({ length: 7 }, (_, index) => index + 1).map(
+                      (dayCount) => (
+                        <button
+                          key={dayCount}
+                          type="button"
+                          aria-pressed={weekVisibleDays === dayCount}
+                          onClick={() => onWeekVisibleDaysChange(dayCount)}
+                          className={cx(
+                            "min-h-10 rounded-lg border text-sm font-bold transition active:scale-[0.98]",
+                            weekVisibleDays === dayCount
+                              ? "border-mint-500 bg-mint-500 text-white"
+                              : "border-[color:var(--planner-border)] bg-[color:var(--planner-surface-muted)]",
+                          )}
+                        >
+                          {dayCount}
+                        </button>
+                      ),
+                    )}
+                  </div>
                 </div>
 
                 {notionConfigs.length > 0 ? (

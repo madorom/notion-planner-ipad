@@ -30,9 +30,9 @@ export function startOfPlannerWeek(anchor: Date) {
   );
 }
 
-export function getWeekDays(anchor: Date) {
+export function getWeekDays(anchor: Date, dayCount = 7) {
   const start = startOfDay(anchor);
-  return Array.from({ length: 7 }, (_, index) => addDays(start, index));
+  return Array.from({ length: dayCount }, (_, index) => addDays(start, index));
 }
 
 export function getMonthDays(anchor: Date) {
@@ -59,14 +59,22 @@ export function getViewRange(view: "week" | "month", anchor: Date) {
   return { start: startOfDay(days[0]), end: addDays(startOfDay(days.at(-1)!), 1) };
 }
 
-export function formatDateLabel(view: "week" | "month", anchor: Date) {
+export function formatDateLabel(
+  view: "week" | "month",
+  anchor: Date,
+  weekVisibleDays = 7,
+) {
   if (view === "month") {
     return format(anchor, "yyyy年M月", { locale: ja });
   }
 
-  const days = getWeekDays(anchor);
+  const days = getWeekDays(anchor, weekVisibleDays);
+  if (days.length <= 1) {
+    return format(days[0], "M/d", { locale: ja });
+  }
+
   return `${format(days[0], "M/d", { locale: ja })} - ${format(
-    days[6],
+    days.at(-1)!,
     "M/d",
     { locale: ja },
   )}`;

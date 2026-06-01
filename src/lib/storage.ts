@@ -8,6 +8,7 @@ const SELECTED_NOTION_CONFIG_IDS_KEY =
 const THEME_MODE_KEY = "notion-planner-ipad:theme:v1";
 const INTERACTION_MODE_KEY = "notion-planner-ipad:interaction-mode:v1";
 const SHOW_ALL_DAY_TASKS_KEY = "notion-planner-ipad:show-all-day:v1";
+const WEEK_VISIBLE_DAYS_KEY = "notion-planner-ipad:week-visible-days:v1";
 const GOOGLE_CALENDAR_ID_KEY = "notion-planner-ipad:google-calendar-id:v1";
 const GOOGLE_CALENDAR_IDS_KEY = "notion-planner-ipad:google-calendar-ids:v1";
 const GOOGLE_CALENDAR_COLORS_KEY =
@@ -15,6 +16,28 @@ const GOOGLE_CALENDAR_COLORS_KEY =
 
 export type ThemeMode = "light" | "dark";
 export type InteractionMode = "view" | "change";
+
+export const DEFAULT_WEEK_VISIBLE_DAYS = 7;
+export const MIN_WEEK_VISIBLE_DAYS = 1;
+export const MAX_WEEK_VISIBLE_DAYS = 7;
+
+export function clampWeekVisibleDays(value: unknown) {
+  const parsed =
+    typeof value === "number"
+      ? value
+      : typeof value === "string"
+        ? Number(value)
+        : DEFAULT_WEEK_VISIBLE_DAYS;
+
+  if (!Number.isFinite(parsed)) {
+    return DEFAULT_WEEK_VISIBLE_DAYS;
+  }
+
+  return Math.min(
+    MAX_WEEK_VISIBLE_DAYS,
+    Math.max(MIN_WEEK_VISIBLE_DAYS, Math.round(parsed)),
+  );
+}
 
 export function loadConfig(): AppConfig | null {
   if (typeof window === "undefined") {
@@ -184,6 +207,23 @@ export function saveShowAllDayTasks(showAllDayTasks: boolean) {
   window.localStorage.setItem(
     SHOW_ALL_DAY_TASKS_KEY,
     showAllDayTasks ? "true" : "false",
+  );
+}
+
+export function loadWeekVisibleDays() {
+  if (typeof window === "undefined") {
+    return DEFAULT_WEEK_VISIBLE_DAYS;
+  }
+
+  return clampWeekVisibleDays(
+    window.localStorage.getItem(WEEK_VISIBLE_DAYS_KEY),
+  );
+}
+
+export function saveWeekVisibleDays(weekVisibleDays: number) {
+  window.localStorage.setItem(
+    WEEK_VISIBLE_DAYS_KEY,
+    String(clampWeekVisibleDays(weekVisibleDays)),
   );
 }
 
