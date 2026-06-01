@@ -101,6 +101,13 @@ button {
   touch-action: pan-x pan-y;
 }
 
+.week-bottom-horizontal-scroll {
+  -webkit-overflow-scrolling: touch;
+  height: 18px;
+  overscroll-behavior-x: contain;
+  touch-action: pan-x;
+}
+
 @media (min-width: 768px) {
   .week-time-scroll {
     height: min(936px, max(340px, calc(100dvh - 260px)));

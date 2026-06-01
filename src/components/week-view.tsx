@@ -230,6 +230,7 @@ export function WeekView({
   const tableMinWidth = days.length * DAY_COLUMN_WIDTH;
   const gridTemplateColumns = `repeat(${days.length}, minmax(${DAY_COLUMN_WIDTH}px, 1fr))`;
   const horizontalScrollRef = useRef<HTMLDivElement | null>(null);
+  const bottomHorizontalScrollRef = useRef<HTMLDivElement | null>(null);
   const gridRef = useRef<HTMLDivElement | null>(null);
   const timeScrollRef = useRef<HTMLDivElement | null>(null);
   const fixedTimeAxisRef = useRef<HTMLDivElement | null>(null);
@@ -237,6 +238,7 @@ export function WeekView({
   const initializedScrollRef = useRef(false);
   const pendingScrollAdjustmentRef = useRef(0);
   const isRepositioningRef = useRef(false);
+  const isSyncingHorizontalScrollRef = useRef(false);
   const lastWindowShiftAtRef = useRef(0);
   const lastVisibleDateKeyRef = useRef("");
   const dragSessionRef = useRef<DragSession | null>(null);
@@ -311,33 +313,6 @@ export function WeekView({
     dragSessionRef.current = null;
     setCurrentDragPreview(null);
   }, [cancelCreateHold, editable]);
-
-  useLayoutEffect(() => {
-    const horizontalScroll = horizontalScrollRef.current;
-    if (!horizontalScroll) {
-      return;
-    }
-
-    if (!initializedScrollRef.current) {
-      horizontalScroll.scrollLeft = CONTINUOUS_PAST_DAYS * DAY_COLUMN_WIDTH;
-      initializedScrollRef.current = true;
-    } else if (pendingScrollAdjustmentRef.current !== 0) {
-      horizontalScroll.scrollLeft += pendingScrollAdjustmentRef.current;
-      pendingScrollAdjustmentRef.current = 0;
-    }
-
-    const timeScroll = timeScrollRef.current;
-    if (timeScroll && Math.abs(timeScroll.scrollTop - timeScrollTopRef.current) > 1) {
-      timeScroll.scrollTop = timeScrollTopRef.current;
-    }
-    if (fixedTimeAxisRef.current) {
-      fixedTimeAxisRef.current.style.transform = `translate3d(0, -${timeScrollTopRef.current}px, 0)`;
-    }
-
-    window.requestAnimationFrame(() => {
-      isRepositioningRef.current = false;
-    });
-  }, [currentDate, showAllDayTasks]);
 
   useEffect(() => {
     function handlePointerMove(event: PointerEvent) {
@@ -442,31 +417,55 @@ export function WeekView({
     onDateChange(addDays(currentDate, direction * CONTINUOUS_SHIFT_DAYS));
   }
 
-  function reportVisibleDate(node: HTMLDivElement, columnWidth: number) {
-    const dayIndex = clamp(
-      Math.floor(node.scrollLeft / columnWidth + 0.35),
-      0,
-      days.length - 1,
-    );
-    const visibleDate = days[dayIndex];
-    const visibleDateKey = format(visibleDate, "yyyy-MM-dd");
+  function syncHorizontalScrollbar(
+    scrollLeft: number,
+    source?: HTMLDivElement | null,
+  ) {
+    const targets = [
+      horizontalScrollRef.current,
+      bottomHorizontalScrollRef.current,
+    ];
 
-    if (visibleDateKey === lastVisibleDateKeyRef.current) {
-      return;
+    isSyncingHorizontalScrollRef.current = true;
+    for (const target of targets) {
+      if (!target || target === source) {
+        continue;
+      }
+
+      if (Math.abs(target.scrollLeft - scrollLeft) > 1) {
+        target.scrollLeft = scrollLeft;
+      }
     }
 
-    lastVisibleDateKeyRef.current = visibleDateKey;
-    onVisibleDateChange(visibleDate);
+    window.requestAnimationFrame(() => {
+      isSyncingHorizontalScrollRef.current = false;
+    });
   }
 
-  function handleHorizontalScroll(event: UIEvent<HTMLDivElement>) {
-    if (isRepositioningRef.current) {
-      return;
-    }
+  const reportVisibleDate = useCallback(
+    (node: HTMLDivElement, columnWidth: number) => {
+      const dayIndex = clamp(
+        Math.floor(node.scrollLeft / columnWidth + 0.05),
+        0,
+        days.length - 1,
+      );
+      const visibleDate = days[dayIndex];
+      const visibleDateKey = format(visibleDate, "yyyy-MM-dd");
 
-    const node = event.currentTarget;
+      if (visibleDateKey === lastVisibleDateKeyRef.current) {
+        return;
+      }
+
+      lastVisibleDateKeyRef.current = visibleDateKey;
+      onVisibleDateChange(visibleDate);
+    },
+    [days, onVisibleDateChange],
+  );
+
+  function updateHorizontalPosition(node: HTMLDivElement) {
     const columnWidth = columnWidthFor(node, days.length);
     reportVisibleDate(node, columnWidth);
+    syncHorizontalScrollbar(node.scrollLeft, node);
 
     const edgeDistance = columnWidth * CONTINUOUS_EDGE_DAYS;
     const maxScrollLeft = node.scrollWidth - node.clientWidth;
@@ -480,6 +479,55 @@ export function WeekView({
       shiftDateWindow(1, columnWidth);
     }
   }
+
+  function handleHorizontalScroll(event: UIEvent<HTMLDivElement>) {
+    if (isRepositioningRef.current || isSyncingHorizontalScrollRef.current) {
+      return;
+    }
+
+    updateHorizontalPosition(event.currentTarget);
+  }
+
+  function handleBottomHorizontalScroll(event: UIEvent<HTMLDivElement>) {
+    if (isRepositioningRef.current || isSyncingHorizontalScrollRef.current) {
+      return;
+    }
+
+    updateHorizontalPosition(event.currentTarget);
+  }
+
+  useLayoutEffect(() => {
+    const horizontalScroll = horizontalScrollRef.current;
+    if (!horizontalScroll) {
+      return;
+    }
+
+    if (!initializedScrollRef.current) {
+      horizontalScroll.scrollLeft = CONTINUOUS_PAST_DAYS * DAY_COLUMN_WIDTH;
+      initializedScrollRef.current = true;
+    } else if (pendingScrollAdjustmentRef.current !== 0) {
+      horizontalScroll.scrollLeft += pendingScrollAdjustmentRef.current;
+      pendingScrollAdjustmentRef.current = 0;
+    }
+
+    syncHorizontalScrollbar(horizontalScroll.scrollLeft, horizontalScroll);
+
+    const timeScroll = timeScrollRef.current;
+    if (timeScroll && Math.abs(timeScroll.scrollTop - timeScrollTopRef.current) > 1) {
+      timeScroll.scrollTop = timeScrollTopRef.current;
+    }
+    if (fixedTimeAxisRef.current) {
+      fixedTimeAxisRef.current.style.transform = `translate3d(0, -${timeScrollTopRef.current}px, 0)`;
+    }
+
+    window.requestAnimationFrame(() => {
+      reportVisibleDate(
+        horizontalScroll,
+        columnWidthFor(horizontalScroll, days.length),
+      );
+      isRepositioningRef.current = false;
+    });
+  }, [currentDate, days.length, reportVisibleDate, showAllDayTasks]);
 
   function beginCreateHold(day: Date, event: ReactPointerEvent<HTMLDivElement>) {
     if (
@@ -768,6 +816,19 @@ export function WeekView({
                 })}
               </div>
             </div>
+          </div>
+        </div>
+        <div
+          className="border-t border-[color:var(--planner-border)] bg-[color:var(--planner-surface)] px-0 py-1.5"
+          style={{ marginLeft: TIME_AXIS_WIDTH }}
+        >
+          <div
+            ref={bottomHorizontalScrollRef}
+            aria-label="日付横スクロール"
+            className="planner-scroll week-bottom-horizontal-scroll overflow-x-auto overflow-y-hidden"
+            onScroll={handleBottomHorizontalScroll}
+          >
+            <div style={{ width: tableMinWidth, height: 1 }} />
           </div>
         </div>
       </div>
