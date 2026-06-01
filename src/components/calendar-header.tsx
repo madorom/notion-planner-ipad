@@ -195,56 +195,132 @@ export function CalendarHeader({
 
   return (
     <header className="sticky top-0 z-30 border-b border-[color:var(--planner-border)] bg-[color:var(--planner-bg)]/92 px-3 py-2 backdrop-blur md:px-6 md:py-3">
-      <div className="mx-auto grid max-w-[1500px] gap-2 md:flex md:flex-wrap md:items-center md:gap-3">
-        <div className="flex min-w-0 items-center justify-between gap-2 md:flex-1">
-          <div className="flex min-w-0 items-center gap-2 md:gap-3">
-            <div className="flex h-10 w-10 shrink-0 items-center justify-center rounded-xl bg-mint-500 text-white shadow-planner-soft md:h-12 md:w-12">
-              <CalendarDays className="h-5 w-5 md:h-6 md:w-6" />
-            </div>
-            <div className="min-w-0">
-              <p className="hidden text-xs font-bold uppercase tracking-[0.18em] text-[color:var(--planner-soft)] sm:block">
-                Notion Planner
-              </p>
-              <h1 className="truncate text-lg font-bold leading-tight sm:text-2xl md:text-3xl">
-                {formatDateLabel(view, currentDate)}
-              </h1>
-            </div>
+      <div className="mx-auto flex max-w-[1500px] flex-wrap items-center gap-2 md:gap-3">
+        <div className="flex min-w-0 flex-1 items-center gap-2 md:gap-3">
+          <div className="flex h-10 w-10 shrink-0 items-center justify-center rounded-xl bg-mint-500 text-white shadow-planner-soft md:h-12 md:w-12">
+            <CalendarDays className="h-5 w-5 md:h-6 md:w-6" />
           </div>
+          <div className="min-w-0">
+            <p className="hidden text-xs font-bold uppercase tracking-[0.18em] text-[color:var(--planner-soft)] sm:block">
+              Notion Planner
+            </p>
+            <h1 className="truncate text-lg font-bold leading-tight sm:text-2xl md:text-3xl">
+              {formatDateLabel(view, currentDate)}
+            </h1>
+          </div>
+        </div>
 
-          <div className="flex shrink-0 items-center gap-1.5 md:gap-2">
+        <div className="order-3 grid w-full gap-2 md:order-none md:flex md:w-auto md:items-center md:gap-3">
+          <div className="grid grid-cols-[44px_minmax(64px,1fr)_44px] gap-1.5 md:flex md:items-center md:gap-2">
             <IconButton
-              label="再読み込み"
-              onClick={onRefresh}
-              disabled={loading}
+              label={previousLabel}
+              onClick={() => shiftDate(-1)}
               className="px-2 md:px-3"
             >
-              <RefreshCw className={`h-5 w-5 ${loading ? "animate-spin" : ""}`} />
+              <ChevronLeft className="h-5 w-5" />
             </IconButton>
-            <IconButton label="設定" onClick={onSettings} className="px-2 md:px-3">
-              <Settings className="h-5 w-5" />
+            <IconButton label="今日" onClick={goToday}>
+              <PanelLeftOpen className="mr-1.5 h-5 w-5 md:mr-2" />
+              <span>今日</span>
             </IconButton>
-            <div ref={actionsMenuRef} className="relative">
-              <IconButton
-                label="メニュー"
-                active={activeMenuCount > 0 || googleConnected}
-                className="gap-2 px-2 md:px-3"
-                onClick={() => setActionsMenuOpen((open) => !open)}
+            <IconButton
+              label={nextLabel}
+              onClick={() => shiftDate(1)}
+              className="px-2 md:px-3"
+            >
+              <ChevronRight className="h-5 w-5" />
+            </IconButton>
+          </div>
+
+          <div className="grid gap-2 sm:grid-cols-[auto_auto] md:flex md:items-center">
+            <div className="grid w-[96px] grid-cols-2 rounded-lg border border-[color:var(--planner-border)] bg-[color:var(--planner-surface)] p-1 shadow-sm">
+              <button
+                type="button"
+                aria-label="閲覧モード"
+                title="閲覧モード"
+                aria-pressed={interactionMode === "view"}
+                onClick={() => onInteractionModeChange("view")}
+                className={`inline-flex min-h-10 items-center justify-center rounded-md px-0 text-sm font-bold transition ${
+                  interactionMode === "view"
+                    ? "bg-ink text-white dark:bg-mint-500"
+                    : ""
+                }`}
               >
-                <Menu className="h-5 w-5" />
-                {activeMenuCount > 0 ? (
-                  <span className="rounded-full bg-white/25 px-1.5 text-xs">
-                    {activeMenuCount}
-                  </span>
-                ) : null}
-              </IconButton>
-              <div
-                className={cx(
-                  "fixed left-3 right-3 top-[96px] z-50 max-h-[calc(100dvh-112px)] overflow-y-auto rounded-xl border border-[color:var(--planner-border)] bg-[color:var(--planner-surface)] p-3 shadow-planner transition planner-scroll md:absolute md:left-auto md:right-0 md:top-[calc(100%+8px)] md:w-[min(92vw,420px)]",
-                  actionsMenuOpen
-                    ? "visible opacity-100"
-                    : "invisible pointer-events-none opacity-0",
-                )}
+                <Eye className="h-4 w-4" />
+              </button>
+              <button
+                type="button"
+                aria-label="変更モード"
+                title="変更モード"
+                aria-pressed={interactionMode === "change"}
+                onClick={() => onInteractionModeChange("change")}
+                className={`inline-flex min-h-10 items-center justify-center rounded-md px-0 text-sm font-bold transition ${
+                  interactionMode === "change"
+                    ? "bg-coral-500 text-white"
+                    : ""
+                }`}
               >
+                <PencilLine className="h-4 w-4" />
+              </button>
+            </div>
+
+            <div className="grid grid-cols-2 rounded-lg border border-[color:var(--planner-border)] bg-[color:var(--planner-surface)] p-1 shadow-sm">
+              <button
+                type="button"
+                onClick={() => onViewChange("week")}
+                className={`min-h-10 rounded-md px-3 text-sm font-bold transition sm:px-5 ${
+                  view === "week" ? "bg-ink text-white dark:bg-mint-500" : ""
+                }`}
+              >
+                週
+              </button>
+              <button
+                type="button"
+                onClick={() => onViewChange("month")}
+                className={`min-h-10 rounded-md px-3 text-sm font-bold transition sm:px-5 ${
+                  view === "month" ? "bg-ink text-white dark:bg-mint-500" : ""
+                }`}
+              >
+                月
+              </button>
+            </div>
+          </div>
+        </div>
+
+        <div className="order-2 flex shrink-0 items-center gap-1.5 md:order-none md:gap-2">
+          <IconButton
+            label="再読み込み"
+            onClick={onRefresh}
+            disabled={loading}
+            className="px-2 md:px-3"
+          >
+            <RefreshCw className={`h-5 w-5 ${loading ? "animate-spin" : ""}`} />
+          </IconButton>
+          <IconButton label="設定" onClick={onSettings} className="px-2 md:px-3">
+            <Settings className="h-5 w-5" />
+          </IconButton>
+          <div ref={actionsMenuRef} className="relative">
+            <IconButton
+              label="メニュー"
+              active={activeMenuCount > 0 || googleConnected}
+              className="gap-2 px-2 md:px-3"
+              onClick={() => setActionsMenuOpen((open) => !open)}
+            >
+              <Menu className="h-5 w-5" />
+              {activeMenuCount > 0 ? (
+                <span className="rounded-full bg-white/25 px-1.5 text-xs">
+                  {activeMenuCount}
+                </span>
+              ) : null}
+            </IconButton>
+            <div
+              className={cx(
+                "fixed left-3 right-3 top-[96px] z-50 max-h-[calc(100dvh-112px)] overflow-y-auto rounded-xl border border-[color:var(--planner-border)] bg-[color:var(--planner-surface)] p-3 shadow-planner transition planner-scroll md:absolute md:left-auto md:right-0 md:top-[calc(100%+8px)] md:w-[min(92vw,420px)]",
+                actionsMenuOpen
+                  ? "visible opacity-100"
+                  : "invisible pointer-events-none opacity-0",
+              )}
+            >
                 <div className="grid gap-2 border-b border-[color:var(--planner-border)] pb-3">
                   <button
                     type="button"
@@ -502,82 +578,6 @@ export function CalendarHeader({
             </div>
           </div>
         </div>
-
-        <div className="grid gap-2 md:flex md:items-center md:gap-3">
-          <div className="grid grid-cols-[44px_minmax(64px,1fr)_44px] gap-1.5 md:flex md:items-center md:gap-2">
-            <IconButton
-              label={previousLabel}
-              onClick={() => shiftDate(-1)}
-              className="px-2 md:px-3"
-            >
-              <ChevronLeft className="h-5 w-5" />
-            </IconButton>
-            <IconButton label="今日" onClick={goToday}>
-              <PanelLeftOpen className="mr-1.5 h-5 w-5 md:mr-2" />
-              <span>今日</span>
-            </IconButton>
-            <IconButton
-              label={nextLabel}
-              onClick={() => shiftDate(1)}
-              className="px-2 md:px-3"
-            >
-              <ChevronRight className="h-5 w-5" />
-            </IconButton>
-          </div>
-
-          <div className="grid gap-2 sm:grid-cols-2 md:flex md:items-center">
-            <div className="grid grid-cols-2 rounded-lg border border-[color:var(--planner-border)] bg-[color:var(--planner-surface)] p-1 shadow-sm">
-              <button
-                type="button"
-                aria-pressed={interactionMode === "view"}
-                onClick={() => onInteractionModeChange("view")}
-                className={`inline-flex min-h-10 items-center justify-center gap-1.5 rounded-md px-3 text-sm font-bold transition sm:px-4 ${
-                  interactionMode === "view"
-                    ? "bg-ink text-white dark:bg-mint-500"
-                    : ""
-                }`}
-              >
-                <Eye className="h-4 w-4" />
-                閲覧
-              </button>
-              <button
-                type="button"
-                aria-pressed={interactionMode === "change"}
-                onClick={() => onInteractionModeChange("change")}
-                className={`inline-flex min-h-10 items-center justify-center gap-1.5 rounded-md px-3 text-sm font-bold transition sm:px-4 ${
-                  interactionMode === "change"
-                    ? "bg-coral-500 text-white"
-                    : ""
-                }`}
-              >
-                <PencilLine className="h-4 w-4" />
-                変更
-              </button>
-            </div>
-
-            <div className="grid grid-cols-2 rounded-lg border border-[color:var(--planner-border)] bg-[color:var(--planner-surface)] p-1 shadow-sm">
-              <button
-                type="button"
-                onClick={() => onViewChange("week")}
-                className={`min-h-10 rounded-md px-3 text-sm font-bold transition sm:px-5 ${
-                  view === "week" ? "bg-ink text-white dark:bg-mint-500" : ""
-                }`}
-              >
-                週
-              </button>
-              <button
-                type="button"
-                onClick={() => onViewChange("month")}
-                className={`min-h-10 rounded-md px-3 text-sm font-bold transition sm:px-5 ${
-                  view === "month" ? "bg-ink text-white dark:bg-mint-500" : ""
-                }`}
-              >
-                月
-              </button>
-            </div>
-          </div>
-        </div>
-      </div>
     </header>
   );
 }
