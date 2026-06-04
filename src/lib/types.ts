@@ -36,6 +36,7 @@ export type PropertyMapping = {
   tags?: string;
   url?: string | string[];
   files?: string | string[];
+  relation?: string | string[];
 };
 
 export type AppConfig = {
@@ -77,6 +78,7 @@ export type PlannerTask = {
   externalUrl?: string;
   externalUrls?: PlannerLink[];
   attachments?: PlannerAttachment[];
+  relations?: PlannerRelationGroup[];
   propertySummaries?: PlannerPropertySummary[];
   icon?: NotionIcon;
 };
@@ -90,6 +92,11 @@ export type PlannerAttachment = {
   name: string;
   url: string;
   type?: "external" | "file";
+};
+
+export type PlannerRelationGroup = {
+  name: string;
+  pageIds: string[];
 };
 
 export type PlannerPropertySummary = {
@@ -129,6 +136,7 @@ export type TaskInput = {
   externalUrl?: string;
   externalUrls?: PlannerLink[];
   attachments?: PlannerAttachment[];
+  relations?: PlannerRelationGroup[];
 };
 
 export type SchemaResponse = {

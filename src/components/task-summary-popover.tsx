@@ -69,7 +69,11 @@ export function TaskSummaryPopover({
         ? [{ name: "URL", url: task.externalUrl }]
         : [];
   const propertySummaries =
-    task.propertySummaries?.filter((property) => property.value) ?? [];
+    task.propertySummaries?.filter(
+      (property) => property.value && property.type !== "relation",
+    ) ?? [];
+  const relationGroups =
+    task.relations?.filter((relation) => relation.pageIds.length > 0) ?? [];
 
   return (
     <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/20 p-3 backdrop-blur-[2px]">
@@ -156,6 +160,35 @@ export function TaskSummaryPopover({
                   <Paperclip className="h-4 w-4" />
                   <span className="truncate">{attachment.name}</span>
                 </a>
+              ))}
+            </div>
+          ) : null}
+
+          {relationGroups.length > 0 ? (
+            <div className="grid gap-1.5">
+              {relationGroups.map((relation) => (
+                <div
+                  key={relation.name}
+                  className="grid gap-1 rounded-lg border border-[color:var(--planner-border)] bg-[color:var(--planner-surface-muted)] px-3 py-2"
+                >
+                  <div className="text-xs font-bold text-[color:var(--planner-soft)]">
+                    {relation.name}
+                  </div>
+                  <div className="flex flex-wrap gap-1.5">
+                    {relation.pageIds.map((pageId) => (
+                      <a
+                        key={`${relation.name}-${pageId}`}
+                        href={`https://www.notion.so/${pageId.replace(/-/g, "")}`}
+                        target="_blank"
+                        rel="noreferrer"
+                        className="inline-flex min-h-8 items-center gap-1.5 rounded-lg border border-[color:var(--planner-border)] px-2.5 font-mono text-xs font-bold text-mint-600"
+                      >
+                        <ExternalLink className="h-3.5 w-3.5" />
+                        {pageId.slice(0, 8)}
+                      </a>
+                    ))}
+                  </div>
+                </div>
               ))}
             </div>
           ) : null}

@@ -23,6 +23,9 @@ function autoMap(properties: NotionProperty[]): PropertyMapping {
   const fileProperties = properties.filter(
     (property) => property.type === "files",
   );
+  const relationProperties = properties.filter(
+    (property) => property.type === "relation",
+  );
 
   return {
     title: properties.find((property) => property.type === "title")?.name ?? "",
@@ -37,6 +40,9 @@ function autoMap(properties: NotionProperty[]): PropertyMapping {
       : undefined,
     files: fileProperties.length
       ? fileProperties.map((property) => property.name)
+      : undefined,
+    relation: relationProperties.length
+      ? relationProperties.map((property) => property.name)
       : undefined,
   };
 }
@@ -68,6 +74,7 @@ export function SetupPanel({ initialConfig, onReady }: SetupPanelProps) {
       tags: undefined,
       url: undefined,
       files: undefined,
+      relation: undefined,
     },
   );
   const [loading, setLoading] = useState(false);
@@ -137,6 +144,7 @@ export function SetupPanel({ initialConfig, onReady }: SetupPanelProps) {
       tags: undefined,
       url: undefined,
       files: undefined,
+      relation: undefined,
     });
     setError("");
   }
@@ -167,6 +175,10 @@ export function SetupPanel({ initialConfig, onReady }: SetupPanelProps) {
           url: mappingValues(current.url).length > 0 ? current.url : next.url,
           files:
             mappingValues(current.files).length > 0 ? current.files : next.files,
+          relation:
+            mappingValues(current.relation).length > 0
+              ? current.relation
+              : next.relation,
         };
       });
     } catch (connectError) {
@@ -509,6 +521,15 @@ export function SetupPanel({ initialConfig, onReady }: SetupPanelProps) {
                   setMapping((current) => ({ ...current, files: value }))
                 }
               />
+              <MultiMappingSelect
+                label="リレーション"
+                value={mapping.relation}
+                properties={allProperties}
+                supportedTypes={["relation"]}
+                onChange={(value) =>
+                  setMapping((current) => ({ ...current, relation: value }))
+                }
+              />
             </div>
 
             <div className="rounded-lg border border-[color:var(--planner-border)] bg-[color:var(--planner-surface-muted)] p-3">
@@ -531,6 +552,7 @@ export function SetupPanel({ initialConfig, onReady }: SetupPanelProps) {
                     "multi_select",
                     "url",
                     "files",
+                    "relation",
                   ].includes(property.type);
 
                   return (

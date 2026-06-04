@@ -29,6 +29,7 @@ export async function GET(request: NextRequest) {
       tags: request.nextUrl.searchParams.get("tagsProperty") ?? undefined,
       url: request.nextUrl.searchParams.getAll("urlProperty"),
       files: request.nextUrl.searchParams.getAll("filesProperty"),
+      relation: request.nextUrl.searchParams.getAll("relationProperty"),
     };
 
     if (!token) {

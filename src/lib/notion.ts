@@ -6,6 +6,7 @@ import type {
   PlannerAttachment,
   PlannerLink,
   PlannerPropertySummary,
+  PlannerRelationGroup,
   PlannerTask,
   PropertyMapping,
   TaskInput,
@@ -23,6 +24,7 @@ const CALENDAR_SUPPORTED_PROPERTY_TYPES = new Set([
   "multi_select",
   "url",
   "files",
+  "relation",
 ]);
 
 type NotionErrorBody = {
@@ -610,6 +612,36 @@ function relationSummary(value: unknown) {
   return Array.isArray(value) ? `${value.length}件` : "";
 }
 
+function getRelationPageIds(page: NotionPage, propertyName?: string) {
+  if (!propertyName) {
+    return [];
+  }
+
+  const value = page.properties[propertyName]?.relation;
+  if (!Array.isArray(value)) {
+    return [];
+  }
+
+  return value
+    .map((relation) => {
+      if (relation && typeof relation === "object" && "id" in relation) {
+        return String(relation.id);
+      }
+      return "";
+    })
+    .filter(Boolean);
+}
+
+function getRelationsFromProperties(
+  page: NotionPage,
+  propertyNames: string[],
+): PlannerRelationGroup[] {
+  return propertyNames.map((propertyName) => ({
+    name: propertyName,
+    pageIds: getRelationPageIds(page, propertyName),
+  }));
+}
+
 function propertySummaryValue(
   page: NotionPage,
   property: NotionProperty,
@@ -686,6 +718,10 @@ export function pageToTask(
     statusOptionColor(properties, mapping.status, status.status);
   const externalUrls = getExternalUrls(page, mappingValues(mapping.url));
   const attachments = getFilesFromProperties(page, mappingValues(mapping.files));
+  const relations = getRelationsFromProperties(
+    page,
+    mappingValues(mapping.relation),
+  );
 
   return {
     id: page.id,
@@ -699,6 +735,7 @@ export function pageToTask(
     externalUrl: externalUrls[0]?.url,
     externalUrls,
     attachments,
+    relations,
     propertySummaries: getPropertySummaries(page, properties),
     icon: normalizeIcon(page.icon),
     status: status.status,
@@ -810,6 +847,17 @@ function buildProperties(
             type: "external",
             external: { url: attachment.url },
           })),
+      };
+    }
+  }
+
+  if (task.relations !== undefined) {
+    for (const propertyName of mappingValues(mapping.relation)) {
+      const relation = task.relations.find((item) => item.name === propertyName);
+      properties[propertyName] = {
+        relation: (relation?.pageIds ?? [])
+          .filter(Boolean)
+          .map((id) => ({ id })),
       };
     }
   }

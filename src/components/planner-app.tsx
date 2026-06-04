@@ -693,6 +693,11 @@ export function PlannerApp() {
           for (const propertyName of mappingValues(sourceConfig.mapping.files)) {
             params.append("filesProperty", propertyName);
           }
+          for (const propertyName of mappingValues(
+            sourceConfig.mapping.relation,
+          )) {
+            params.append("relationProperty", propertyName);
+          }
 
           const response = await fetch(`/api/notion/tasks?${params.toString()}`);
           const data = (await response.json()) as {
@@ -1226,6 +1231,7 @@ export function PlannerApp() {
       externalUrl: task.externalUrl,
       externalUrls: task.externalUrls,
       attachments: task.attachments,
+      relations: task.relations,
     };
   }
 

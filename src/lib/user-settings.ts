@@ -131,6 +131,12 @@ function sanitizeMapping(value: unknown): PropertyMapping | null {
         : Array.isArray(value.files)
           ? stringArray(value.files)
           : undefined,
+    relation:
+      typeof value.relation === "string"
+        ? value.relation
+        : Array.isArray(value.relation)
+          ? stringArray(value.relation)
+          : undefined,
   };
 }
 

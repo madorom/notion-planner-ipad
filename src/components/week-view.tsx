@@ -14,7 +14,11 @@ import {
 } from "date-fns";
 import { ja } from "date-fns/locale";
 import { ChevronDown, ChevronRight } from "lucide-react";
-import type { PointerEvent as ReactPointerEvent, UIEvent } from "react";
+import type {
+  PointerEvent as ReactPointerEvent,
+  UIEvent,
+  WheelEvent as ReactWheelEvent,
+} from "react";
 import {
   useCallback,
   useEffect,
@@ -623,6 +627,28 @@ export function WeekView({
     updateHorizontalPosition(event.currentTarget);
   }
 
+  function handleTrackpadHorizontalWheel(event: ReactWheelEvent<HTMLDivElement>) {
+    const horizontalDelta =
+      Math.abs(event.deltaX) > Math.abs(event.deltaY)
+        ? event.deltaX
+        : event.shiftKey
+          ? event.deltaY
+          : 0;
+
+    if (Math.abs(horizontalDelta) < 1 || isRepositioningRef.current) {
+      return;
+    }
+
+    const horizontalScroll = horizontalScrollRef.current;
+    if (!horizontalScroll) {
+      return;
+    }
+
+    event.preventDefault();
+    horizontalScroll.scrollLeft += horizontalDelta;
+    updateHorizontalPosition(horizontalScroll);
+  }
+
   useLayoutEffect(() => {
     const horizontalScroll = horizontalScrollRef.current;
     if (!horizontalScroll) {
@@ -984,6 +1010,7 @@ export function WeekView({
               ref={timeScrollRef}
               className="planner-scroll week-time-scroll overflow-y-auto overflow-x-hidden"
               onScroll={handleTimeScroll}
+              onWheel={handleTrackpadHorizontalWheel}
             >
               <div
                 ref={gridRef}

@@ -51,6 +51,7 @@ function optionNames(options?: NotionOption[]) {
 
 function initialFromState(state: ModalState, config: AppConfig) {
   const urlPropertyNames = mappingValues(config.mapping.url);
+  const relationPropertyNames = mappingValues(config.mapping.relation);
 
   if (state.mode === "create") {
     return {
@@ -65,10 +66,14 @@ function initialFromState(state: ModalState, config: AppConfig) {
         urlPropertyNames.map((propertyName) => [propertyName, ""]),
       ) as Record<string, string>,
       attachments: "",
+      relations: Object.fromEntries(
+        relationPropertyNames.map((propertyName) => [propertyName, ""]),
+      ) as Record<string, string>,
     };
   }
 
   const taskExternalUrls = state.task.externalUrls ?? [];
+  const taskRelations = state.task.relations ?? [];
 
   return {
     title: state.task.title,
@@ -87,6 +92,14 @@ function initialFromState(state: ModalState, config: AppConfig) {
       ]),
     ) as Record<string, string>,
     attachments: attachmentInputValue(state.task.attachments),
+    relations: Object.fromEntries(
+      relationPropertyNames.map((propertyName) => [
+        propertyName,
+        taskRelations
+          .find((relation) => relation.name === propertyName)
+          ?.pageIds.join("\n") ?? "",
+      ]),
+    ) as Record<string, string>,
   };
 }
 
@@ -116,6 +129,51 @@ function isHttpUrl(value: string) {
   } catch {
     return false;
   }
+}
+
+function normalizeNotionPageId(value: string) {
+  const uuid = value.match(
+    /[0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{12}/,
+  )?.[0];
+  const compact = uuid
+    ? uuid.replace(/-/g, "")
+    : value.match(/[0-9a-fA-F]{32}/)?.[0];
+
+  if (!compact) {
+    return null;
+  }
+
+  const normalized = compact.toLowerCase();
+  return [
+    normalized.slice(0, 8),
+    normalized.slice(8, 12),
+    normalized.slice(12, 16),
+    normalized.slice(16, 20),
+    normalized.slice(20),
+  ].join("-");
+}
+
+function parseRelationInput(value: string) {
+  const tokens = value
+    .split(/[\s,]+/)
+    .map((item) => item.trim())
+    .filter(Boolean);
+  const pageIds: string[] = [];
+  const invalid: string[] = [];
+
+  for (const token of tokens) {
+    const pageId = normalizeNotionPageId(token);
+    if (pageId) {
+      pageIds.push(pageId);
+    } else {
+      invalid.push(token);
+    }
+  }
+
+  return {
+    pageIds: Array.from(new Set(pageIds)),
+    invalid,
+  };
 }
 
 function attachmentInputValue(
@@ -168,6 +226,7 @@ export function taskPropertyTypes(config: AppConfig) {
     tags: findProperty(config, mapping.tags)?.type,
     url: findProperty(config, firstMappingValue(mapping.url))?.type,
     files: findProperty(config, firstMappingValue(mapping.files))?.type,
+    relation: findProperty(config, firstMappingValue(mapping.relation))?.type,
   } satisfies Partial<Record<keyof typeof mapping, NotionPropertyType>>;
 }
 
@@ -196,6 +255,11 @@ export function TaskModal({
   );
   const hasUrl = urlPropertyNames.length > 0;
   const hasFiles = mappingValues(config.mapping.files).length > 0;
+  const relationPropertyNames = useMemo(
+    () => mappingValues(config.mapping.relation),
+    [config.mapping.relation],
+  );
+  const hasRelations = relationPropertyNames.length > 0;
   const existingTask = state.mode === "edit" ? state.task : undefined;
   const isSidePanel = state.mode === "edit";
   const memoUrls = extractUrls(form.memo);
@@ -208,6 +272,14 @@ export function TaskModal({
     readOnly && existingTask?.attachments
       ? existingTask.attachments
       : parseAttachmentInput(form.attachments);
+  const relationGroups = relationPropertyNames.map((propertyName) => {
+    const parsed = parseRelationInput(form.relations[propertyName] ?? "");
+    return {
+      name: propertyName,
+      pageIds: parsed.pageIds,
+      invalid: parsed.invalid,
+    };
+  });
 
   async function submit(event: FormEvent<HTMLFormElement>) {
     event.preventDefault();
@@ -257,6 +329,16 @@ export function TaskModal({
       return;
     }
 
+    const invalidRelation = relationGroups.find(
+      (relation) => relation.invalid.length > 0,
+    );
+    if (hasRelations && invalidRelation) {
+      setError(
+        `${invalidRelation.name}のリレーションにはNotionページIDまたはURLを入力してください。`,
+      );
+      return;
+    }
+
     await onSave(
       {
         title: form.title.trim(),
@@ -273,6 +355,9 @@ export function TaskModal({
           ? externalUrls.filter((link) => link.url)
           : undefined,
         attachments: shouldSendAttachments ? attachments : undefined,
+        relations: hasRelations
+          ? relationGroups.map(({ name, pageIds }) => ({ name, pageIds }))
+          : undefined,
       },
       existingTask,
     );
@@ -545,6 +630,62 @@ export function TaskModal({
                 </div>
               ) : null}
             </label>
+          ) : null}
+
+          {hasRelations ? (
+            <div className="grid gap-3">
+              <span className="text-sm font-semibold text-[color:var(--planner-soft)]">
+                リレーション
+              </span>
+              {relationPropertyNames.map((propertyName) => {
+                const value = form.relations[propertyName] ?? "";
+                const parsed = parseRelationInput(value);
+
+                return (
+                  <label key={propertyName} className="grid gap-2">
+                    <span className="text-xs font-bold text-[color:var(--planner-soft)]">
+                      {propertyName}
+                    </span>
+                    <textarea
+                      value={value}
+                      readOnly={readOnly}
+                      rows={3}
+                      placeholder="ページIDまたはNotion URL"
+                      onChange={(event) =>
+                        setForm((current) => ({
+                          ...current,
+                          relations: {
+                            ...current.relations,
+                            [propertyName]: event.target.value,
+                          },
+                        }))
+                      }
+                      className={cx(
+                        "rounded-lg border border-[color:var(--planner-border)] bg-[color:var(--planner-surface)] px-4 py-3 font-mono text-sm outline-none transition focus:border-mint-500",
+                        readOnly &&
+                          "cursor-default bg-[color:var(--planner-surface-muted)]",
+                      )}
+                    />
+                    {readOnly && parsed.pageIds.length > 0 ? (
+                      <div className="flex flex-wrap gap-1.5">
+                        {parsed.pageIds.map((pageId) => (
+                          <a
+                            key={`${propertyName}-${pageId}`}
+                            href={`https://www.notion.so/${pageId.replace(/-/g, "")}`}
+                            target="_blank"
+                            rel="noreferrer"
+                            className="inline-flex min-h-8 items-center gap-1.5 rounded-lg border border-[color:var(--planner-border)] px-2.5 font-mono text-xs font-bold text-mint-600"
+                          >
+                            <ExternalLink className="h-3.5 w-3.5" />
+                            {pageId.slice(0, 8)}
+                          </a>
+                        ))}
+                      </div>
+                    ) : null}
+                  </label>
+                );
+              })}
+            </div>
           ) : null}
 
           {hasTags ? (
